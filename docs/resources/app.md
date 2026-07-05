@@ -22,6 +22,7 @@ Manages a Dokku app deployed from a registry image (`dokku apps:create` + `dokku
 
 ### Optional
 
+- `env` (Map of String, Sensitive) Environment variables to set on the app (`dokku config:set`), applied after the app is created and before the image is deployed.
 - `registry_password` (String, Sensitive) Password or token for registry authentication.
 - `registry_server` (String) Registry server to authenticate against before deploying, e.g. registry.example.com. Omit for Docker Hub public images.
 - `registry_username` (String) Username for registry authentication.

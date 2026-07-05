@@ -2,7 +2,10 @@ package provider
 
 import (
 	"context"
+	"sort"
+	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -34,6 +37,7 @@ type AppResourceModel struct {
 	RegistryServer   types.String `tfsdk:"registry_server"`
 	RegistryUsername types.String `tfsdk:"registry_username"`
 	RegistryPassword types.String `tfsdk:"registry_password"`
+	Env              types.Map    `tfsdk:"env"`
 	DeployedSHA      types.String `tfsdk:"deployed_sha"`
 	ID               types.String `tfsdk:"id"`
 }
@@ -69,6 +73,12 @@ func (r *AppResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 				Optional:    true,
 				Sensitive:   true,
 				Description: "Password or token for registry authentication.",
+			},
+			"env": schema.MapAttribute{
+				ElementType: types.StringType,
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Environment variables to set on the app (`dokku config:set`), applied after the app is created and before the image is deployed.",
 			},
 			"deployed_sha": schema.StringAttribute{
 				Computed:    true,
@@ -115,6 +125,84 @@ func (r *AppResource) deploy(name string, data *AppResourceModel) error {
 	return err
 }
 
+// stringMapToGo converts a types.Map of strings into a plain Go map,
+// returning nil for a null or unknown map.
+func stringMapToGo(m types.Map) map[string]string {
+	if m.IsNull() || m.IsUnknown() {
+		return nil
+	}
+	out := make(map[string]string, len(m.Elements()))
+	for k, v := range m.Elements() {
+		if s, ok := v.(types.String); ok {
+			out[k] = s.ValueString()
+		}
+	}
+	return out
+}
+
+// setEnv applies data.Env in full via a single `config:set` call.
+func (r *AppResource) setEnv(name string, data *AppResourceModel) error {
+	env := stringMapToGo(data.Env)
+	if len(env) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	args := []string{"config:set", name}
+	for _, k := range keys {
+		args = append(args, k+"="+env[k])
+	}
+	_, err := r.client.RunChecked(args...)
+	return err
+}
+
+// updateEnv diffs plan.Env against state.Env, unsetting removed keys and
+// setting new or changed ones. Diagnostics are added to resp on failure.
+func (r *AppResource) updateEnv(name string, plan, state *AppResourceModel, resp *resource.UpdateResponse) error {
+	planEnv := stringMapToGo(plan.Env)
+	stateEnv := stringMapToGo(state.Env)
+
+	var toUnset []string
+	for k := range stateEnv {
+		if _, ok := planEnv[k]; !ok {
+			toUnset = append(toUnset, k)
+		}
+	}
+	if len(toUnset) > 0 {
+		sort.Strings(toUnset)
+		args := append([]string{"config:unset", name}, toUnset...)
+		if _, err := r.client.RunChecked(args...); err != nil {
+			resp.Diagnostics.AddError("Error unsetting app environment variables", err.Error())
+			return err
+		}
+	}
+
+	var toSet []string
+	for k, v := range planEnv {
+		if old, ok := stateEnv[k]; !ok || old != v {
+			toSet = append(toSet, k)
+		}
+	}
+	if len(toSet) > 0 {
+		sort.Strings(toSet)
+		args := []string{"config:set", name}
+		for _, k := range toSet {
+			args = append(args, k+"="+planEnv[k])
+		}
+		if _, err := r.client.RunChecked(args...); err != nil {
+			resp.Diagnostics.AddError("Error updating app environment variables", err.Error())
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (r *AppResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data AppResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -125,6 +213,11 @@ func (r *AppResource) Create(ctx context.Context, req resource.CreateRequest, re
 	name := data.Name.ValueString()
 	if _, err := r.client.RunChecked("apps:create", name); err != nil {
 		resp.Diagnostics.AddError("Error creating app", err.Error())
+		return
+	}
+
+	if err := r.setEnv(name, &data); err != nil {
+		resp.Diagnostics.AddError("Error setting app environment variables", err.Error())
 		return
 	}
 
@@ -173,6 +266,19 @@ func (r *AppResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 		}
 	}
 
+	if !data.Env.IsNull() {
+		values := make(map[string]attr.Value, len(data.Env.Elements()))
+		for k := range data.Env.Elements() {
+			res, err := r.client.Run("config:get", name, k)
+			if err == nil && res.ExitCode == 0 {
+				values[k] = types.StringValue(strings.TrimRight(res.Stdout, "\n"))
+			}
+		}
+		envMap, diags := types.MapValue(types.StringType, values)
+		resp.Diagnostics.Append(diags...)
+		data.Env = envMap
+	}
+
 	data.ID = types.StringValue(name)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -202,6 +308,10 @@ func (r *AppResource) Update(ctx context.Context, req resource.UpdateRequest, re
 			resp.Diagnostics.AddError("Error authenticating to registry", err.Error())
 			return
 		}
+	}
+
+	if err := r.updateEnv(name, &plan, &state, resp); err != nil {
+		return
 	}
 
 	if plan.Image.ValueString() != state.Image.ValueString() {
