@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -38,6 +39,7 @@ type AppResourceModel struct {
 	RegistryUsername types.String `tfsdk:"registry_username"`
 	RegistryPassword types.String `tfsdk:"registry_password"`
 	Env              types.Map    `tfsdk:"env"`
+	Scale            types.Map    `tfsdk:"scale"`
 	DeployedSHA      types.String `tfsdk:"deployed_sha"`
 	ID               types.String `tfsdk:"id"`
 }
@@ -79,6 +81,11 @@ func (r *AppResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 				Optional:    true,
 				Sensitive:   true,
 				Description: "Environment variables to set on the app (`dokku config:set`), applied after the app is created and before the image is deployed.",
+			},
+			"scale": schema.MapAttribute{
+				ElementType: types.Int64Type,
+				Optional:    true,
+				Description: "Process scaling to apply (`dokku ps:scale`), keyed by process type (e.g. web, worker), applied before the image is deployed.",
 			},
 			"deployed_sha": schema.StringAttribute{
 				Computed:    true,
@@ -138,6 +145,43 @@ func stringMapToGo(m types.Map) map[string]string {
 		}
 	}
 	return out
+}
+
+// int64MapToGo converts a types.Map of Int64 into a plain Go map, returning
+// nil for a null or unknown map.
+func int64MapToGo(m types.Map) map[string]int64 {
+	if m.IsNull() || m.IsUnknown() {
+		return nil
+	}
+	out := make(map[string]int64, len(m.Elements()))
+	for k, v := range m.Elements() {
+		if i, ok := v.(types.Int64); ok {
+			out[k] = i.ValueInt64()
+		}
+	}
+	return out
+}
+
+// setScale applies data.Scale in full via a single `ps:scale` call, run
+// before the app is deployed.
+func (r *AppResource) setScale(name string, data *AppResourceModel) error {
+	scale := int64MapToGo(data.Scale)
+	if len(scale) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(scale))
+	for k := range scale {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	args := []string{"ps:scale", name}
+	for _, k := range keys {
+		args = append(args, k+"="+strconv.FormatInt(scale[k], 10))
+	}
+	_, err := r.client.RunChecked(args...)
+	return err
 }
 
 // setEnv applies data.Env in full via a single `config:set` call.
@@ -221,6 +265,11 @@ func (r *AppResource) Create(ctx context.Context, req resource.CreateRequest, re
 		return
 	}
 
+	if err := r.setScale(name, &data); err != nil {
+		resp.Diagnostics.AddError("Error setting app scale", err.Error())
+		return
+	}
+
 	if err := r.login(name, &data); err != nil {
 		resp.Diagnostics.AddError("Error authenticating to registry", err.Error())
 		return
@@ -294,6 +343,17 @@ func (r *AppResource) Update(ctx context.Context, req resource.UpdateRequest, re
 
 	name := plan.Name.ValueString()
 
+	if err := r.updateEnv(name, &plan, &state, resp); err != nil {
+		return
+	}
+
+	if !plan.Scale.Equal(state.Scale) {
+		if err := r.setScale(name, &plan); err != nil {
+			resp.Diagnostics.AddError("Error updating app scale", err.Error())
+			return
+		}
+	}
+
 	credsChanged := plan.RegistryServer.ValueString() != state.RegistryServer.ValueString() ||
 		plan.RegistryUsername.ValueString() != state.RegistryUsername.ValueString() ||
 		plan.RegistryPassword.ValueString() != state.RegistryPassword.ValueString()
@@ -308,10 +368,6 @@ func (r *AppResource) Update(ctx context.Context, req resource.UpdateRequest, re
 			resp.Diagnostics.AddError("Error authenticating to registry", err.Error())
 			return
 		}
-	}
-
-	if err := r.updateEnv(name, &plan, &state, resp); err != nil {
-		return
 	}
 
 	if plan.Image.ValueString() != state.Image.ValueString() {

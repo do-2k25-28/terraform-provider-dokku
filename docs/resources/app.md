@@ -26,6 +26,7 @@ Manages a Dokku app deployed from a registry image (`dokku apps:create` + `dokku
 - `registry_password` (String, Sensitive) Password or token for registry authentication.
 - `registry_server` (String) Registry server to authenticate against before deploying, e.g. registry.example.com. Omit for Docker Hub public images.
 - `registry_username` (String) Username for registry authentication.
+- `scale` (Map of Number) Process scaling to apply (`dokku ps:scale`), keyed by process type (e.g. web, worker), applied before the image is deployed.
 
 ### Read-Only
 
