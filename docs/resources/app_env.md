@@ -3,12 +3,12 @@
 page_title: "dokku_app_env Resource - dokku"
 subcategory: ""
 description: |-
-  Manages a single environment variable on a Dokku app (dokku config:set). The value is passed unquoted over the SSH forced-command interface, so it may not contain whitespace.
+  Manages the environment variables on a Dokku app (dokku config:set). Values are passed unquoted over the SSH forced-command interface, so they may not contain whitespace.
 ---
 
 # dokku_app_env (Resource)
 
-Manages a single environment variable on a Dokku app (`dokku config:set`). The value is passed unquoted over the SSH forced-command interface, so it may not contain whitespace.
+Manages the environment variables on a Dokku app (`dokku config:set`). Values are passed unquoted over the SSH forced-command interface, so they may not contain whitespace.
 
 
 
@@ -18,8 +18,7 @@ Manages a single environment variable on a Dokku app (`dokku config:set`). The v
 ### Required
 
 - `app` (String)
-- `key` (String) Environment variable name.
-- `value` (String, Sensitive) Environment variable value.
+- `env` (Map of String, Sensitive) Map of environment variable names to values.
 
 ### Read-Only
 
