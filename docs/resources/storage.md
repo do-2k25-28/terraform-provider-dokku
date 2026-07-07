@@ -21,6 +21,7 @@ Manages a named Dokku persistent storage entry (`dokku storage:create`).
 
 ### Optional
 
+- `chown` (String) Ownership to apply to the storage directory (`dokku storage:create --chown` / `dokku storage:set --chown`): "herokuish" (32767:32767), "heroku" (1000:1000 — use this if your container runs as 1000:1000), "paketo" (2000:2000), "root" (0:0), or "false" to skip chown and manage ownership manually. Only supported when `path` is unset (the default host path).
 - `path` (String) Host path to back the storage entry. Defaults to Dokku's standard storage location if unset.
 
 ### Read-Only

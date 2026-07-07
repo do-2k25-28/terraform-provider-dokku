@@ -28,6 +28,7 @@ type StorageResource struct {
 type StorageResourceModel struct {
 	Name     types.String `tfsdk:"name"`
 	Path     types.String `tfsdk:"path"`
+	Chown    types.String `tfsdk:"chown"`
 	HostPath types.String `tfsdk:"host_path"`
 	ID       types.String `tfsdk:"id"`
 }
@@ -53,6 +54,10 @@ func (r *StorageResource) Schema(ctx context.Context, req resource.SchemaRequest
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
+			},
+			"chown": schema.StringAttribute{
+				Optional:    true,
+				Description: "Ownership to apply to the storage directory (`dokku storage:create --chown` / `dokku storage:set --chown`): \"herokuish\" (32767:32767), \"heroku\" (1000:1000 — use this if your container runs as 1000:1000), \"paketo\" (2000:2000), \"root\" (0:0), or \"false\" to skip chown and manage ownership manually. Only supported when `path` is unset (the default host path).",
 			},
 			"host_path": schema.StringAttribute{
 				Computed:    true,
@@ -87,7 +92,11 @@ func (r *StorageResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	args := []string{"storage:create", data.Name.ValueString()}
+	args := []string{"storage:create"}
+	if chown := data.Chown.ValueString(); chown != "" {
+		args = append(args, "--chown", chown)
+	}
+	args = append(args, data.Name.ValueString())
 	if !data.Path.IsNull() && data.Path.ValueString() != "" {
 		args = append(args, data.Path.ValueString())
 	}
@@ -123,15 +132,33 @@ func (r *StorageResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	data.HostPath = types.StringValue(parseJSONField(res.Stdout, "host_path"))
+	if chown := parseJSONField(res.Stdout, "chown"); chown != "" {
+		data.Chown = types.StringValue(chown)
+	} else {
+		data.Chown = types.StringNull()
+	}
 	data.ID = types.StringValue(data.Name.ValueString())
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *StorageResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// Both name and path are RequiresReplace.
-	var data StorageResourceModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	// name and path are RequiresReplace; only chown can change in place.
+	var plan StorageResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	var state StorageResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if chown := plan.Chown.ValueString(); chown != "" && chown != state.Chown.ValueString() {
+		if _, err := r.client.RunChecked("storage:set", plan.Name.ValueString(), "--chown", chown); err != nil {
+			resp.Diagnostics.AddError("Error updating storage chown", err.Error())
+			return
+		}
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *StorageResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
