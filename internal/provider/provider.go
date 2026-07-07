@@ -143,6 +143,7 @@ func (p *DokkuProvider) Resources(ctx context.Context) []func() resource.Resourc
 		NewAppPortResource,
 		NewAppDomainResource,
 		NewAppEnvResource,
+		NewAppScaleResource,
 		NewAppSchedulerResource,
 		NewAppNetworkResource,
 		NewDomainResource,
