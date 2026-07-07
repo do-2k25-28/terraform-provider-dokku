@@ -1,0 +1,200 @@
+package provider
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/dokku/terraform-provider-dokku/internal/dokku"
+)
+
+var (
+	_ resource.Resource                = &AppDockerImageResource{}
+	_ resource.ResourceWithConfigure   = &AppDockerImageResource{}
+	_ resource.ResourceWithImportState = &AppDockerImageResource{}
+)
+
+func NewAppDockerImageResource() resource.Resource { return &AppDockerImageResource{} }
+
+// AppDockerImageResource deploys a Dokku app straight from a container
+// registry image, bypassing git push (`dokku git:from-image`). Dokku
+// generates a single-line Dockerfile (`FROM <image>`), commits it to the
+// app's repo and deploys it.
+type AppDockerImageResource struct {
+	client *dokku.Client
+}
+
+type AppDockerImageResourceModel struct {
+	App              types.String `tfsdk:"app"`
+	Image            types.String `tfsdk:"image"`
+	RegistryUsername types.String `tfsdk:"registry_username"`
+	RegistryPassword types.String `tfsdk:"registry_password"`
+	DeployedSHA      types.String `tfsdk:"deployed_sha"`
+	ID               types.String `tfsdk:"id"`
+}
+
+func (r *AppDockerImageResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_app_docker_image"
+}
+
+func (r *AppDockerImageResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Description: "Deploys a Dokku app from a container registry image (`dokku git:from-image`), instead of a git push. Changing `image` triggers a redeploy.",
+		Attributes: map[string]schema.Attribute{
+			"app": schema.StringAttribute{
+				Required:    true,
+				Description: "App to deploy.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"image": schema.StringAttribute{
+				Required:    true,
+				Description: "Image reference to deploy, e.g. \"my-registry/node-js-getting-started:latest\". Pin to a digest (`image@sha256:...`) to guarantee a redeploy when the tag is reused with new content.",
+			},
+			"registry_username": schema.StringAttribute{
+				Optional:    true,
+				Description: "Username used to authenticate to the private registry hosting `image` before deploying (`dokku registry:login`). The registry host is inferred from `image`. Required together with registry_password.",
+			},
+			"registry_password": schema.StringAttribute{
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Password or access token used to authenticate to the private registry hosting `image`. Required together with registry_username.",
+			},
+			"deployed_sha": schema.StringAttribute{
+				Computed:    true,
+				Description: "Deploy revision reported by Dokku for the current deploy.",
+			},
+			"id": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+		},
+	}
+}
+
+func (r *AppDockerImageResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+	client, ok := req.ProviderData.(*dokku.Client)
+	if !ok {
+		resp.Diagnostics.AddError("Unexpected resource configure type", "Expected *dokku.Client")
+		return
+	}
+	r.client = client
+}
+
+// registryHost infers the registry host to authenticate against from an
+// image reference, following the same convention as `docker pull`: the
+// segment before the first "/" is a host only if it looks like one
+// (contains "." or ":", or is "localhost"); otherwise the image is assumed
+// to live on Docker Hub.
+func registryHost(image string) string {
+	repo, _, _ := strings.Cut(image, "/")
+	if repo != image && (strings.ContainsAny(repo, ".:") || repo == "localhost") {
+		return repo
+	}
+	return "docker.io"
+}
+
+func (r *AppDockerImageResource) login(data *AppDockerImageResourceModel) error {
+	username := data.RegistryUsername.ValueString()
+	password := data.RegistryPassword.ValueString()
+	if username == "" && password == "" {
+		return nil
+	}
+	if username == "" || password == "" {
+		return errors.New("registry_username and registry_password must be set together")
+	}
+
+	host := registryHost(data.Image.ValueString())
+	_, err := r.client.RunChecked("registry:login", host, username, password)
+	return err
+}
+
+func (r *AppDockerImageResource) deploy(data *AppDockerImageResourceModel) error {
+	if err := r.login(data); err != nil {
+		return err
+	}
+	_, err := r.client.RunChecked("git:from-image", data.App.ValueString(), data.Image.ValueString())
+	return err
+}
+
+func (r *AppDockerImageResource) populateComputed(data *AppDockerImageResourceModel) {
+	report, err := r.client.Report("git", data.App.ValueString())
+	if err != nil {
+		data.DeployedSHA = types.StringValue("")
+		return
+	}
+	data.DeployedSHA = types.StringValue(report["sha"])
+}
+
+func (r *AppDockerImageResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data AppDockerImageResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if err := r.deploy(&data); err != nil {
+		resp.Diagnostics.AddError("Error deploying app from image", err.Error())
+		return
+	}
+
+	data.ID = types.StringValue(data.App.ValueString())
+	r.populateComputed(&data)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *AppDockerImageResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data AppDockerImageResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if _, err := r.client.Report("apps", data.App.ValueString()); err != nil {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	data.ID = types.StringValue(data.App.ValueString())
+	r.populateComputed(&data)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *AppDockerImageResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan AppDockerImageResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if err := r.deploy(&plan); err != nil {
+		resp.Diagnostics.AddError("Error redeploying app from image", err.Error())
+		return
+	}
+
+	plan.ID = types.StringValue(plan.App.ValueString())
+	r.populateComputed(&plan)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+// Delete only drops the resource from state: Dokku has no inverse of
+// git:from-image, so there is nothing to roll back on the app itself.
+func (r *AppDockerImageResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+}
+
+func (r *AppDockerImageResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("app"), req, resp)
+}
