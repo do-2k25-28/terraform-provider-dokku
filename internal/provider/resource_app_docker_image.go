@@ -37,6 +37,7 @@ type AppDockerImageResourceModel struct {
 	RegistryUsername types.String `tfsdk:"registry_username"`
 	RegistryPassword types.String `tfsdk:"registry_password"`
 	DeployedSHA      types.String `tfsdk:"deployed_sha"`
+	ContainerName    types.String `tfsdk:"container_name"`
 	ID               types.String `tfsdk:"id"`
 }
 
@@ -71,6 +72,10 @@ func (r *AppDockerImageResource) Schema(ctx context.Context, req resource.Schema
 			"deployed_sha": schema.StringAttribute{
 				Computed:    true,
 				Description: "Deploy revision reported by Dokku for the current deploy.",
+			},
+			"container_name": schema.StringAttribute{
+				Computed:    true,
+				Description: "Dyno identifier Dokku assigns to the app's primary web container (`<app>.web.1`), as seen in `com.dokku.dyno` container labels and `dokku logs` line prefixes. Populated once the resource has been deployed. Dokku appends a random suffix to the actual underlying `docker ps` container name that isn't exposed by any `dokku` command, so this is the stable identifier rather than the literal container name.",
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -134,9 +139,10 @@ func (r *AppDockerImageResource) populateComputed(data *AppDockerImageResourceMo
 	report, err := r.client.Report("git", data.App.ValueString())
 	if err != nil {
 		data.DeployedSHA = types.StringValue("")
-		return
+	} else {
+		data.DeployedSHA = types.StringValue(report["sha"])
 	}
-	data.DeployedSHA = types.StringValue(report["sha"])
+	data.ContainerName = types.StringValue(data.App.ValueString() + ".web.1")
 }
 
 func (r *AppDockerImageResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
