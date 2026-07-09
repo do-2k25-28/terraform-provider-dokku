@@ -123,8 +123,6 @@ func (r *AppLetsencryptResource) Read(ctx context.Context, req resource.ReadRequ
 
 	if email := report["email"]; email != "" {
 		data.Email = types.StringValue(email)
-	} else if email := report["computed-email"]; email != "" {
-		data.Email = types.StringValue(email)
 	}
 
 	data.ID = types.StringValue(data.App.ValueString())
