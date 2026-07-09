@@ -142,7 +142,7 @@ func (r *AppDockerImageResource) populateComputed(data *AppDockerImageResourceMo
 	} else {
 		data.DeployedSHA = types.StringValue(report["sha"])
 	}
-	data.ContainerName = types.StringValue(data.App.ValueString() + ".web.1")
+	data.ContainerName = types.StringValue(data.App.ValueString() + "-web-1")
 }
 
 func (r *AppDockerImageResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
