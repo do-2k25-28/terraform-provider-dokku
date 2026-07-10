@@ -3,12 +3,12 @@
 page_title: "dokku_traefik Resource - dokku"
 subcategory: ""
 description: |-
-  Controls whether the global Dokku traefik proxy is running (dokku traefik:start / dokku traefik:stop).
+  Controls whether the global Dokku traefik proxy is running (dokku traefik:start / dokku traefik:stop) and its letsencrypt integration.
 ---
 
 # dokku_traefik (Resource)
 
-Controls whether the global Dokku traefik proxy is running (`dokku traefik:start` / `dokku traefik:stop`).
+Controls whether the global Dokku traefik proxy is running (`dokku traefik:start` / `dokku traefik:stop`) and its letsencrypt integration.
 
 
 
@@ -18,6 +18,14 @@ Controls whether the global Dokku traefik proxy is running (`dokku traefik:start
 ### Required
 
 - `enabled` (Boolean) Whether the traefik proxy should be running. `true` runs `dokku traefik:start`, `false` runs `dokku traefik:stop`.
+
+### Optional
+
+- `letsencrypt_challenge_mode` (String) ACME challenge method used by Traefik: `tls`, `http`, or `dns` (`dokku traefik:set --global challenge-mode`). Defaults to `tls`.
+- `letsencrypt_dns_provider` (String) Lego DNS provider name used when `letsencrypt_challenge_mode` is `dns` (`dokku traefik:set --global dns-provider`).
+- `letsencrypt_dns_provider_config` (Map of String, Sensitive) Map of lego DNS provider credentials/options for `letsencrypt_dns_provider`, e.g. `{ CLOUDFLARE_API_TOKEN = "..." }`. Keys are set as `dns-provider-<KEY>` properties (`dokku traefik:set --global dns-provider-<KEY> <value>`).
+- `letsencrypt_email` (String) Contact email that enables the traefik letsencrypt integration (`dokku traefik:set --global letsencrypt-email`). Letsencrypt is disabled and https port mappings are ignored while this is unset. Changing this or any other `letsencrypt_*` attribute requires restarting the Traefik container (toggle `enabled`) to take effect.
+- `letsencrypt_server` (String) ACME directory URL used when requesting certificates (`dokku traefik:set --global letsencrypt-server`). Defaults to the production Let's Encrypt server.
 
 ### Read-Only
 
