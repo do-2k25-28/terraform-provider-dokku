@@ -73,7 +73,7 @@ func (r *AppDockerImageResource) Schema(ctx context.Context, req resource.Schema
 				Computed:    true,
 				Description: "Deploy revision reported by Dokku for the current deploy.",
 			},
-			"container_name": schema.StringAttribute{
+			"network_alias": schema.StringAttribute{
 				Computed:    true,
 				Description: "Dyno identifier Dokku assigns to the app's primary web container (`<app>.web.1`), as seen in `com.dokku.dyno` container labels and `dokku logs` line prefixes. Populated once the resource has been deployed. Dokku appends a random suffix to the actual underlying `docker ps` container name that isn't exposed by any `dokku` command, so this is the stable identifier rather than the literal container name.",
 			},

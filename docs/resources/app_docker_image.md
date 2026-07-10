@@ -27,6 +27,6 @@ Deploys a Dokku app from a container registry image (`dokku git:from-image`), in
 
 ### Read-Only
 
-- `container_name` (String) Dyno identifier Dokku assigns to the app's primary web container (`<app>.web.1`), as seen in `com.dokku.dyno` container labels and `dokku logs` line prefixes. Populated once the resource has been deployed. Dokku appends a random suffix to the actual underlying `docker ps` container name that isn't exposed by any `dokku` command, so this is the stable identifier rather than the literal container name.
+- `network_alias` (String) Dyno identifier Dokku assigns to the app's primary web container (`<app>.web`), as seen in `com.dokku.dyno` container labels and `dokku logs` line prefixes. Populated once the resource has been deployed. Dokku appends a random suffix to the actual underlying `docker ps` container name that isn't exposed by any `dokku` command, so this is the stable identifier rather than the literal container name.
 - `deployed_sha` (String) Deploy revision reported by Dokku for the current deploy.
 - `id` (String) The ID of this resource.
