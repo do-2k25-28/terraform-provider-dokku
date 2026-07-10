@@ -37,7 +37,7 @@ type AppDockerImageResourceModel struct {
 	RegistryUsername types.String `tfsdk:"registry_username"`
 	RegistryPassword types.String `tfsdk:"registry_password"`
 	DeployedSHA      types.String `tfsdk:"deployed_sha"`
-	ContainerName    types.String `tfsdk:"container_name"`
+	NetworkAlias     types.String `tfsdk:"network_alias"`
 	ID               types.String `tfsdk:"id"`
 }
 
@@ -142,7 +142,7 @@ func (r *AppDockerImageResource) populateComputed(data *AppDockerImageResourceMo
 	} else {
 		data.DeployedSHA = types.StringValue(report["sha"])
 	}
-	data.ContainerName = types.StringValue(data.App.ValueString() + "-web-1")
+	data.NetworkAlias = types.StringValue(data.App.ValueString() + ".web")
 }
 
 func (r *AppDockerImageResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
