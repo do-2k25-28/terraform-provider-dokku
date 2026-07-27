@@ -21,16 +21,16 @@ var (
 
 func NewAppProxyResource() resource.Resource { return &AppProxyResource{} }
 
-// AppProxyResource models the proxy implementation selected for a Dokku app
-// (`dokku proxy:set <app> type <value>`).
+// AppProxyResource models whether the proxy is enabled for a Dokku app
+// (`dokku proxy:enable <app>` / `dokku proxy:disable <app>`).
 type AppProxyResource struct {
 	client *dokku.Client
 }
 
 type AppProxyResourceModel struct {
-	App  types.String `tfsdk:"app"`
-	Type types.String `tfsdk:"type"`
-	ID   types.String `tfsdk:"id"`
+	App     types.String `tfsdk:"app"`
+	Enabled types.Bool   `tfsdk:"enabled"`
+	ID      types.String `tfsdk:"id"`
 }
 
 func (r *AppProxyResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -39,7 +39,7 @@ func (r *AppProxyResource) Metadata(ctx context.Context, req resource.MetadataRe
 
 func (r *AppProxyResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Sets the proxy implementation used to route traffic to a Dokku app (`dokku proxy:set <app> type`).",
+		Description: "Enables or disables the proxy for a Dokku app (`dokku proxy:enable <app>` / `dokku proxy:disable <app>`).",
 		Attributes: map[string]schema.Attribute{
 			"app": schema.StringAttribute{
 				Required: true,
@@ -47,9 +47,9 @@ func (r *AppProxyResource) Schema(ctx context.Context, req resource.SchemaReques
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"type": schema.StringAttribute{
+			"enabled": schema.BoolAttribute{
 				Required:    true,
-				Description: "Proxy implementation to use for this app, e.g. nginx, caddy, haproxy, traefik, openresty. Falls back to the global default (nginx unless overridden) when unset.",
+				Description: "Whether the proxy is enabled for this app. `true` runs `dokku proxy:enable`, `false` runs `dokku proxy:disable`.",
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -73,8 +73,12 @@ func (r *AppProxyResource) Configure(ctx context.Context, req resource.Configure
 	r.client = client
 }
 
-func (r *AppProxyResource) set(app, value string) error {
-	_, err := r.client.RunChecked("proxy:set", app, "type", value)
+func (r *AppProxyResource) apply(app string, enabled bool) error {
+	if enabled {
+		_, err := r.client.RunChecked("proxy:enable", app)
+		return err
+	}
+	_, err := r.client.RunChecked("proxy:disable", app)
 	return err
 }
 
@@ -85,8 +89,8 @@ func (r *AppProxyResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	if err := r.set(data.App.ValueString(), data.Type.ValueString()); err != nil {
-		resp.Diagnostics.AddError("Error setting app proxy type", err.Error())
+	if err := r.apply(data.App.ValueString(), data.Enabled.ValueBool()); err != nil {
+		resp.Diagnostics.AddError("Error setting app proxy state", err.Error())
 		return
 	}
 
@@ -107,7 +111,7 @@ func (r *AppProxyResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	data.Type = types.StringValue(report["type"])
+	data.Enabled = types.BoolValue(report["enabled"] == "true")
 	data.ID = types.StringValue(data.App.ValueString())
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -119,8 +123,8 @@ func (r *AppProxyResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	if err := r.set(data.App.ValueString(), data.Type.ValueString()); err != nil {
-		resp.Diagnostics.AddError("Error updating app proxy type", err.Error())
+	if err := r.apply(data.App.ValueString(), data.Enabled.ValueBool()); err != nil {
+		resp.Diagnostics.AddError("Error updating app proxy state", err.Error())
 		return
 	}
 
@@ -135,8 +139,8 @@ func (r *AppProxyResource) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
-	if _, err := r.client.RunChecked("proxy:set", data.App.ValueString(), "type"); err != nil {
-		resp.Diagnostics.AddError("Error clearing app proxy type", err.Error())
+	if err := r.apply(data.App.ValueString(), true); err != nil {
+		resp.Diagnostics.AddError("Error restoring app proxy state", err.Error())
 	}
 }
 

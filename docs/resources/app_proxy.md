@@ -3,12 +3,12 @@
 page_title: "dokku_app_proxy Resource - dokku"
 subcategory: ""
 description: |-
-  Sets the proxy implementation used to route traffic to a Dokku app (dokku proxy:set <app> type).
+  Enables or disables the proxy for a Dokku app (dokku proxy:enable <app> / dokku proxy:disable <app>).
 ---
 
 # dokku_app_proxy (Resource)
 
-Sets the proxy implementation used to route traffic to a Dokku app (`dokku proxy:set <app> type`).
+Enables or disables the proxy for a Dokku app (`dokku proxy:enable <app>` / `dokku proxy:disable <app>`).
 
 
 
@@ -18,7 +18,7 @@ Sets the proxy implementation used to route traffic to a Dokku app (`dokku proxy
 ### Required
 
 - `app` (String)
-- `type` (String) Proxy implementation to use for this app, e.g. nginx, caddy, haproxy, traefik, openresty. Falls back to the global default (nginx unless overridden) when unset.
+- `enabled` (Boolean) Whether the proxy is enabled for this app. `true` runs `dokku proxy:enable`, `false` runs `dokku proxy:disable`.
 
 ### Read-Only
 
