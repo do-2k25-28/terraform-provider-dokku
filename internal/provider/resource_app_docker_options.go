@@ -180,6 +180,35 @@ func dockerOptionsReportKeys(processes, phases []string) []string {
 	return keys
 }
 
+// canonicalDockerOption reproduces Dokku's own storage-time re-serialization
+// of a docker option (see docker-options' joinShellTokens/quoteShellArg in
+// dockeroptions.go): every whitespace-separated token is shell-quoted if it
+// contains a character Dokku's tokenizer treats as shell syntax, then
+// rejoined with a single space. Dokku always stores options this way, so a
+// value containing e.g. "&", "$", or parentheses comes back quoted even
+// though it was configured unquoted; comparing against the raw option
+// string would then never match, making dockerOptionPresent report the
+// option as missing (and Terraform re-add it) on every plan.
+func canonicalDockerOption(option string) string {
+	tokens := strings.Fields(option)
+	parts := make([]string, len(tokens))
+	for i, tok := range tokens {
+		parts[i] = shellQuoteToken(tok)
+	}
+	return strings.Join(parts, " ")
+}
+
+// shellQuoteToken single-quotes tok if it needs shell quoting (per
+// needsShellQuoting), escaping any embedded single quote by closing the
+// quote, inserting a backslash-escaped quote, and reopening it. Mirrors
+// Dokku's own quoteShellArg (dockeroptions.go).
+func shellQuoteToken(tok string) string {
+	if !needsShellQuoting(tok) {
+		return tok
+	}
+	return "'" + strings.ReplaceAll(tok, "'", `'\''`) + "'"
+}
+
 // dockerOptionPresent reports whether option shows up in every report list
 // the resource's (processes, phases) scope maps to.
 func dockerOptionPresent(lists map[string][]string, processes, phases []string, option string) bool {
@@ -187,8 +216,9 @@ func dockerOptionPresent(lists map[string][]string, processes, phases []string, 
 	if len(keys) == 0 {
 		return false
 	}
+	canonical := canonicalDockerOption(option)
 	for _, key := range keys {
-		if !slices.Contains(lists[key], option) {
+		if !slices.Contains(lists[key], canonical) {
 			return false
 		}
 	}
