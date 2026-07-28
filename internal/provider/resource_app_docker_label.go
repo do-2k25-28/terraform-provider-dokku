@@ -141,11 +141,13 @@ func parseDockerLabelOption(opt string) (key, value string, ok bool) {
 }
 
 // dockerLabelOption builds the raw docker-options OPTION argument for a
-// single label, quoting the "key=value" spec when the value contains
-// whitespace or another shell-special character so it survives Dokku's
-// docker-options tokenizer as one token instead of being split apart.
+// single label. The whole "--label key=value" phrase is shell-quoted as one
+// unit, matching Dokku's documented docker-options:add/:remove usage where
+// OPTION is a single CLI argument (e.g. `dokku docker-options:add app phase
+// '--label key=value'`). Quoting only the "key=value" spec would leave
+// "--label" and the value as two separate tokens instead of one option.
 func dockerLabelOption(key, value string) string {
-	return "--label " + quoteShellArg(key+"="+value)
+	return quoteShellArg("--label " + key + "=" + value)
 }
 
 func (r *AppDockerLabelResource) add(app string, labels map[string]string) error {
