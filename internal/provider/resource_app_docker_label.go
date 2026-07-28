@@ -99,23 +99,6 @@ func needsShellQuoting(s string) bool {
 	return false
 }
 
-// quoteShellArg single-quotes s if it needs shell quoting, escaping any
-// embedded single quote by closing the quote, inserting a backslash-escaped
-// quote, then reopening it (the standard shell close-escape-open trick).
-// This is what makes a label value containing whitespace (or other shell
-// metacharacters) survive as one token: the provider's own SSH transport
-// re-splits/re-joins the command on plain whitespace with no quote handling
-// (see dokku.joinArgs), so it round-trips a quoted value unchanged, and
-// Dokku's docker-options plugin then does its own proper shell-tokenizing
-// parse of the reconstructed string, honoring these quotes to keep the
-// value as a single token.
-func quoteShellArg(s string) string {
-	if !needsShellQuoting(s) {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 // unquoteShellArg reverses quoteShellArg: if s is wrapped in single quotes,
 // it strips them and reverses the close-escape-open trick back into a
 // literal embedded quote.
@@ -147,7 +130,7 @@ func parseDockerLabelOption(opt string) (key, value string, ok bool) {
 // '--label key=value'`). Quoting only the "key=value" spec would leave
 // "--label" and the value as two separate tokens instead of one option.
 func dockerLabelOption(key, value string) string {
-	return quoteShellArg("--label " + key + "=" + value)
+	return "'--label \"" + key + "=" + value + "\"'"
 }
 
 func (r *AppDockerLabelResource) add(app string, labels map[string]string) error {
