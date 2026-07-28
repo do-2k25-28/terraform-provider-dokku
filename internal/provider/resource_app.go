@@ -113,18 +113,18 @@ func (r *AppResource) Create(ctx context.Context, req resource.CreateRequest, re
 	}
 
 	name := data.Name.ValueString()
-	if _, err := r.client.RunChecked("apps:create", name); err != nil {
+	if _, err := r.client.RunChecked(ctx, "apps:create", name); err != nil {
 		resp.Diagnostics.AddError("Error creating app", err.Error())
 		return
 	}
 
 	data.ID = types.StringValue(name)
-	r.populateComputed(&data)
+	r.populateComputed(ctx, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *AppResource) populateComputed(data *AppResourceModel) {
-	report, err := r.client.Report("git", data.Name.ValueString())
+func (r *AppResource) populateComputed(ctx context.Context, data *AppResourceModel) {
+	report, err := r.client.Report(ctx, "git", data.Name.ValueString())
 	if err != nil {
 		data.DeployedSHA = types.StringValue("")
 		return
@@ -140,7 +140,7 @@ func (r *AppResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 	}
 
 	name := data.Name.ValueString()
-	if _, err := r.client.Report("apps", name); err != nil {
+	if _, err := r.client.Report(ctx, "apps", name); err != nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -161,7 +161,7 @@ func (r *AppResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	name := plan.Name.ValueString()
 
 	plan.ID = types.StringValue(name)
-	r.populateComputed(&plan)
+	r.populateComputed(ctx, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -172,7 +172,7 @@ func (r *AppResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 		return
 	}
 
-	if _, err := r.client.RunChecked("apps:destroy", data.Name.ValueString(), "--force"); err != nil {
+	if _, err := r.client.RunChecked(ctx, "apps:destroy", data.Name.ValueString(), "--force"); err != nil {
 		resp.Diagnostics.AddError("Error destroying app", err.Error())
 	}
 }

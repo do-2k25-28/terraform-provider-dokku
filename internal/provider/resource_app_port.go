@@ -97,7 +97,7 @@ func (r *AppPortResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	spec := portSpec(&data)
-	if _, err := r.client.RunChecked("ports:add", data.App.ValueString(), spec); err != nil {
+	if _, err := r.client.RunChecked(ctx, "ports:add", data.App.ValueString(), spec); err != nil {
 		resp.Diagnostics.AddError("Error adding port mapping", err.Error())
 		return
 	}
@@ -113,7 +113,7 @@ func (r *AppPortResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	report, err := r.client.Report("ports", data.App.ValueString())
+	report, err := r.client.Report(ctx, "ports", data.App.ValueString())
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -141,11 +141,11 @@ func (r *AppPortResource) Update(ctx context.Context, req resource.UpdateRequest
 	oldSpec := portSpec(&state)
 	newSpec := portSpec(&plan)
 	if oldSpec != newSpec {
-		if _, err := r.client.RunChecked("ports:remove", state.App.ValueString(), oldSpec); err != nil {
+		if _, err := r.client.RunChecked(ctx, "ports:remove", state.App.ValueString(), oldSpec); err != nil {
 			resp.Diagnostics.AddError("Error removing old port mapping", err.Error())
 			return
 		}
-		if _, err := r.client.RunChecked("ports:add", plan.App.ValueString(), newSpec); err != nil {
+		if _, err := r.client.RunChecked(ctx, "ports:add", plan.App.ValueString(), newSpec); err != nil {
 			resp.Diagnostics.AddError("Error adding new port mapping", err.Error())
 			return
 		}
@@ -162,7 +162,7 @@ func (r *AppPortResource) Delete(ctx context.Context, req resource.DeleteRequest
 	}
 
 	spec := portSpec(&data)
-	if _, err := r.client.RunChecked("ports:remove", data.App.ValueString(), spec); err != nil {
+	if _, err := r.client.RunChecked(ctx, "ports:remove", data.App.ValueString(), spec); err != nil {
 		resp.Diagnostics.AddError("Error removing port mapping", err.Error())
 	}
 }

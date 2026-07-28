@@ -98,55 +98,55 @@ func (r *TraefikResource) Configure(ctx context.Context, req resource.ConfigureR
 	r.client = client
 }
 
-func (r *TraefikResource) apply(enabled bool) error {
+func (r *TraefikResource) apply(ctx context.Context, enabled bool) error {
 	if enabled {
-		_, err := r.client.RunChecked("traefik:start")
+		_, err := r.client.RunChecked(ctx, "traefik:start")
 		return err
 	}
-	_, err := r.client.RunChecked("traefik:stop")
+	_, err := r.client.RunChecked(ctx, "traefik:stop")
 	return err
 }
 
 // setGlobal sets a global traefik property, or clears it when value is
 // empty (`dokku traefik:set --global <key>` with no value deletes it).
-func (r *TraefikResource) setGlobal(key, value string) error {
+func (r *TraefikResource) setGlobal(ctx context.Context, key, value string) error {
 	args := []string{"traefik:set", "--global", key}
 	if value != "" {
 		args = append(args, value)
 	}
-	_, err := r.client.RunChecked(args...)
+	_, err := r.client.RunChecked(ctx, args...)
 	return err
 }
 
-func (r *TraefikResource) setDNSProviderConfig(config map[string]string) error {
+func (r *TraefikResource) setDNSProviderConfig(ctx context.Context, config map[string]string) error {
 	for key, value := range config {
-		if err := r.setGlobal("dns-provider-"+key, value); err != nil {
+		if err := r.setGlobal(ctx, "dns-provider-"+key, value); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *TraefikResource) unsetDNSProviderConfig(keys []string) error {
+func (r *TraefikResource) unsetDNSProviderConfig(ctx context.Context, keys []string) error {
 	for _, key := range keys {
-		if err := r.setGlobal("dns-provider-"+key, ""); err != nil {
+		if err := r.setGlobal(ctx, "dns-provider-"+key, ""); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *TraefikResource) applyLetsencrypt(data TraefikResourceModel) error {
-	if err := r.setGlobal("letsencrypt-email", data.LetsencryptEmail.ValueString()); err != nil {
+func (r *TraefikResource) applyLetsencrypt(ctx context.Context, data TraefikResourceModel) error {
+	if err := r.setGlobal(ctx, "letsencrypt-email", data.LetsencryptEmail.ValueString()); err != nil {
 		return err
 	}
-	if err := r.setGlobal("letsencrypt-server", data.LetsencryptServer.ValueString()); err != nil {
+	if err := r.setGlobal(ctx, "letsencrypt-server", data.LetsencryptServer.ValueString()); err != nil {
 		return err
 	}
-	if err := r.setGlobal("challenge-mode", data.LetsencryptChallengeMode.ValueString()); err != nil {
+	if err := r.setGlobal(ctx, "challenge-mode", data.LetsencryptChallengeMode.ValueString()); err != nil {
 		return err
 	}
-	return r.setGlobal("dns-provider", data.LetsencryptDNSProvider.ValueString())
+	return r.setGlobal(ctx, "dns-provider", data.LetsencryptDNSProvider.ValueString())
 }
 
 func (r *TraefikResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -162,15 +162,15 @@ func (r *TraefikResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	if err := r.applyLetsencrypt(data); err != nil {
+	if err := r.applyLetsencrypt(ctx, data); err != nil {
 		resp.Diagnostics.AddError("Error setting traefik letsencrypt configuration", err.Error())
 		return
 	}
-	if err := r.setDNSProviderConfig(dnsProviderConfig); err != nil {
+	if err := r.setDNSProviderConfig(ctx, dnsProviderConfig); err != nil {
 		resp.Diagnostics.AddError("Error setting traefik letsencrypt dns-provider config", err.Error())
 		return
 	}
-	if err := r.apply(data.Enabled.ValueBool()); err != nil {
+	if err := r.apply(ctx, data.Enabled.ValueBool()); err != nil {
 		resp.Diagnostics.AddError("Error setting traefik proxy state", err.Error())
 		return
 	}
@@ -186,7 +186,7 @@ func (r *TraefikResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	report, err := r.client.Report("traefik", "--global")
+	report, err := r.client.Report(ctx, "traefik", "--global")
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -251,19 +251,19 @@ func (r *TraefikResource) Update(ctx context.Context, req resource.UpdateRequest
 		}
 	}
 
-	if err := r.applyLetsencrypt(plan); err != nil {
+	if err := r.applyLetsencrypt(ctx, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating traefik letsencrypt configuration", err.Error())
 		return
 	}
-	if err := r.unsetDNSProviderConfig(toUnset); err != nil {
+	if err := r.unsetDNSProviderConfig(ctx, toUnset); err != nil {
 		resp.Diagnostics.AddError("Error clearing traefik letsencrypt dns-provider config", err.Error())
 		return
 	}
-	if err := r.setDNSProviderConfig(toSet); err != nil {
+	if err := r.setDNSProviderConfig(ctx, toSet); err != nil {
 		resp.Diagnostics.AddError("Error updating traefik letsencrypt dns-provider config", err.Error())
 		return
 	}
-	if err := r.apply(plan.Enabled.ValueBool()); err != nil {
+	if err := r.apply(ctx, plan.Enabled.ValueBool()); err != nil {
 		resp.Diagnostics.AddError("Error updating traefik proxy state", err.Error())
 		return
 	}
@@ -279,16 +279,16 @@ func (r *TraefikResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	if err := r.setGlobal("letsencrypt-email", ""); err != nil {
+	if err := r.setGlobal(ctx, "letsencrypt-email", ""); err != nil {
 		resp.Diagnostics.AddError("Error clearing traefik letsencrypt email", err.Error())
 	}
-	if err := r.setGlobal("letsencrypt-server", ""); err != nil {
+	if err := r.setGlobal(ctx, "letsencrypt-server", ""); err != nil {
 		resp.Diagnostics.AddError("Error clearing traefik letsencrypt server", err.Error())
 	}
-	if err := r.setGlobal("challenge-mode", ""); err != nil {
+	if err := r.setGlobal(ctx, "challenge-mode", ""); err != nil {
 		resp.Diagnostics.AddError("Error clearing traefik challenge mode", err.Error())
 	}
-	if err := r.setGlobal("dns-provider", ""); err != nil {
+	if err := r.setGlobal(ctx, "dns-provider", ""); err != nil {
 		resp.Diagnostics.AddError("Error clearing traefik dns-provider", err.Error())
 	}
 
@@ -301,14 +301,14 @@ func (r *TraefikResource) Delete(ctx context.Context, req resource.DeleteRequest
 	for key := range config {
 		keys = append(keys, key)
 	}
-	if err := r.unsetDNSProviderConfig(keys); err != nil {
+	if err := r.unsetDNSProviderConfig(ctx, keys); err != nil {
 		resp.Diagnostics.AddError("Error clearing traefik letsencrypt dns-provider config", err.Error())
 	}
 
 	// Unlike nginx, traefik is an opt-in proxy that Dokku does not run by
 	// default, so restoring the default when this resource is no longer
 	// managed means stopping it rather than starting it.
-	if err := r.apply(false); err != nil {
+	if err := r.apply(ctx, false); err != nil {
 		resp.Diagnostics.AddError("Error stopping traefik proxy", err.Error())
 	}
 }

@@ -81,7 +81,7 @@ func (r *AppDomainResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	if _, err := r.client.RunChecked("domains:add", data.App.ValueString(), data.Domain.ValueString()); err != nil {
+	if _, err := r.client.RunChecked(ctx, "domains:add", data.App.ValueString(), data.Domain.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error adding domain", err.Error())
 		return
 	}
@@ -97,7 +97,7 @@ func (r *AppDomainResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	report, err := r.client.Report("domains", data.App.ValueString())
+	report, err := r.client.Report(ctx, "domains", data.App.ValueString())
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -134,7 +134,7 @@ func (r *AppDomainResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
-	if _, err := r.client.RunChecked("domains:remove", data.App.ValueString(), data.Domain.ValueString()); err != nil {
+	if _, err := r.client.RunChecked(ctx, "domains:remove", data.App.ValueString(), data.Domain.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error removing domain", err.Error())
 	}
 }

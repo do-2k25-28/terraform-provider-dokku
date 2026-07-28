@@ -112,7 +112,7 @@ func registryHost(image string) string {
 	return "docker.io"
 }
 
-func (r *AppDockerImageResource) login(data *AppDockerImageResourceModel) error {
+func (r *AppDockerImageResource) login(ctx context.Context, data *AppDockerImageResourceModel) error {
 	username := data.RegistryUsername.ValueString()
 	password := data.RegistryPassword.ValueString()
 	if username == "" && password == "" {
@@ -123,20 +123,20 @@ func (r *AppDockerImageResource) login(data *AppDockerImageResourceModel) error 
 	}
 
 	host := registryHost(data.Image.ValueString())
-	_, err := r.client.RunChecked("registry:login", host, username, password)
+	_, err := r.client.RunChecked(ctx, "registry:login", host, username, password)
 	return err
 }
 
-func (r *AppDockerImageResource) deploy(data *AppDockerImageResourceModel) error {
-	if err := r.login(data); err != nil {
+func (r *AppDockerImageResource) deploy(ctx context.Context, data *AppDockerImageResourceModel) error {
+	if err := r.login(ctx, data); err != nil {
 		return err
 	}
-	_, err := r.client.RunChecked("git:from-image", data.App.ValueString(), data.Image.ValueString())
+	_, err := r.client.RunChecked(ctx, "git:from-image", data.App.ValueString(), data.Image.ValueString())
 	return err
 }
 
-func (r *AppDockerImageResource) populateComputed(data *AppDockerImageResourceModel) {
-	report, err := r.client.Report("git", data.App.ValueString())
+func (r *AppDockerImageResource) populateComputed(ctx context.Context, data *AppDockerImageResourceModel) {
+	report, err := r.client.Report(ctx, "git", data.App.ValueString())
 	if err != nil {
 		data.DeployedSHA = types.StringValue("")
 	} else {
@@ -152,13 +152,13 @@ func (r *AppDockerImageResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	if err := r.deploy(&data); err != nil {
+	if err := r.deploy(ctx, &data); err != nil {
 		resp.Diagnostics.AddError("Error deploying app from image", err.Error())
 		return
 	}
 
 	data.ID = types.StringValue(data.App.ValueString())
-	r.populateComputed(&data)
+	r.populateComputed(ctx, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -169,13 +169,13 @@ func (r *AppDockerImageResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	if _, err := r.client.Report("apps", data.App.ValueString()); err != nil {
+	if _, err := r.client.Report(ctx, "apps", data.App.ValueString()); err != nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
 	data.ID = types.StringValue(data.App.ValueString())
-	r.populateComputed(&data)
+	r.populateComputed(ctx, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -186,13 +186,13 @@ func (r *AppDockerImageResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	if err := r.deploy(&plan); err != nil {
+	if err := r.deploy(ctx, &plan); err != nil {
 		resp.Diagnostics.AddError("Error redeploying app from image", err.Error())
 		return
 	}
 
 	plan.ID = types.StringValue(plan.App.ValueString())
-	r.populateComputed(&plan)
+	r.populateComputed(ctx, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 

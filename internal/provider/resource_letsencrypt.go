@@ -84,38 +84,38 @@ func (r *LetsencryptResource) Configure(ctx context.Context, req resource.Config
 
 // setGlobal sets a global letsencrypt property, or clears it when value is
 // empty (`dokku letsencrypt:set --global <key>` with no value deletes it).
-func (r *LetsencryptResource) setGlobal(key, value string) error {
+func (r *LetsencryptResource) setGlobal(ctx context.Context, key, value string) error {
 	args := []string{"letsencrypt:set", "--global", key}
 	if value != "" {
 		args = append(args, value)
 	}
-	_, err := r.client.RunChecked(args...)
+	_, err := r.client.RunChecked(ctx, args...)
 	return err
 }
 
-func (r *LetsencryptResource) setDNSProviderConfig(config map[string]string) error {
+func (r *LetsencryptResource) setDNSProviderConfig(ctx context.Context, config map[string]string) error {
 	for key, value := range config {
-		if err := r.setGlobal("dns-provider-"+key, value); err != nil {
+		if err := r.setGlobal(ctx, "dns-provider-"+key, value); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *LetsencryptResource) unsetDNSProviderConfig(keys []string) error {
+func (r *LetsencryptResource) unsetDNSProviderConfig(ctx context.Context, keys []string) error {
 	for _, key := range keys {
-		if err := r.setGlobal("dns-provider-"+key, ""); err != nil {
+		if err := r.setGlobal(ctx, "dns-provider-"+key, ""); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *LetsencryptResource) apply(data LetsencryptResourceModel) error {
-	if err := r.setGlobal("email", data.Email.ValueString()); err != nil {
+func (r *LetsencryptResource) apply(ctx context.Context, data LetsencryptResourceModel) error {
+	if err := r.setGlobal(ctx, "email", data.Email.ValueString()); err != nil {
 		return err
 	}
-	return r.setGlobal("dns-provider", data.DNSProvider.ValueString())
+	return r.setGlobal(ctx, "dns-provider", data.DNSProvider.ValueString())
 }
 
 func (r *LetsencryptResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -131,11 +131,11 @@ func (r *LetsencryptResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	if err := r.apply(data); err != nil {
+	if err := r.apply(ctx, data); err != nil {
 		resp.Diagnostics.AddError("Error setting global letsencrypt configuration", err.Error())
 		return
 	}
-	if err := r.setDNSProviderConfig(dnsProviderConfig); err != nil {
+	if err := r.setDNSProviderConfig(ctx, dnsProviderConfig); err != nil {
 		resp.Diagnostics.AddError("Error setting global letsencrypt dns-provider config", err.Error())
 		return
 	}
@@ -151,7 +151,7 @@ func (r *LetsencryptResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	report, err := r.client.Report("letsencrypt", "--global")
+	report, err := r.client.Report(ctx, "letsencrypt", "--global")
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -212,15 +212,15 @@ func (r *LetsencryptResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 	}
 
-	if err := r.apply(plan); err != nil {
+	if err := r.apply(ctx, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating global letsencrypt configuration", err.Error())
 		return
 	}
-	if err := r.unsetDNSProviderConfig(toUnset); err != nil {
+	if err := r.unsetDNSProviderConfig(ctx, toUnset); err != nil {
 		resp.Diagnostics.AddError("Error clearing global letsencrypt dns-provider config", err.Error())
 		return
 	}
-	if err := r.setDNSProviderConfig(toSet); err != nil {
+	if err := r.setDNSProviderConfig(ctx, toSet); err != nil {
 		resp.Diagnostics.AddError("Error updating global letsencrypt dns-provider config", err.Error())
 		return
 	}
@@ -236,10 +236,10 @@ func (r *LetsencryptResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	if err := r.setGlobal("email", ""); err != nil {
+	if err := r.setGlobal(ctx, "email", ""); err != nil {
 		resp.Diagnostics.AddError("Error clearing global letsencrypt email", err.Error())
 	}
-	if err := r.setGlobal("dns-provider", ""); err != nil {
+	if err := r.setGlobal(ctx, "dns-provider", ""); err != nil {
 		resp.Diagnostics.AddError("Error clearing global letsencrypt dns-provider", err.Error())
 	}
 
@@ -252,7 +252,7 @@ func (r *LetsencryptResource) Delete(ctx context.Context, req resource.DeleteReq
 	for key := range config {
 		keys = append(keys, key)
 	}
-	if err := r.unsetDNSProviderConfig(keys); err != nil {
+	if err := r.unsetDNSProviderConfig(ctx, keys); err != nil {
 		resp.Diagnostics.AddError("Error clearing global letsencrypt dns-provider config", err.Error())
 	}
 }

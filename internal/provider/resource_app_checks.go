@@ -73,12 +73,12 @@ func (r *AppChecksResource) Configure(ctx context.Context, req resource.Configur
 	r.client = client
 }
 
-func (r *AppChecksResource) apply(app string, enabled bool) error {
+func (r *AppChecksResource) apply(ctx context.Context, app string, enabled bool) error {
 	if enabled {
-		_, err := r.client.RunChecked("checks:enable", app)
+		_, err := r.client.RunChecked(ctx, "checks:enable", app)
 		return err
 	}
-	_, err := r.client.RunChecked("checks:disable", app)
+	_, err := r.client.RunChecked(ctx, "checks:disable", app)
 	return err
 }
 
@@ -89,7 +89,7 @@ func (r *AppChecksResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	if err := r.apply(data.App.ValueString(), data.Enabled.ValueBool()); err != nil {
+	if err := r.apply(ctx, data.App.ValueString(), data.Enabled.ValueBool()); err != nil {
 		resp.Diagnostics.AddError("Error setting app checks state", err.Error())
 		return
 	}
@@ -105,7 +105,7 @@ func (r *AppChecksResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	report, err := r.client.Report("checks", data.App.ValueString())
+	report, err := r.client.Report(ctx, "checks", data.App.ValueString())
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -124,7 +124,7 @@ func (r *AppChecksResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	if err := r.apply(data.App.ValueString(), data.Enabled.ValueBool()); err != nil {
+	if err := r.apply(ctx, data.App.ValueString(), data.Enabled.ValueBool()); err != nil {
 		resp.Diagnostics.AddError("Error updating app checks state", err.Error())
 		return
 	}
@@ -140,7 +140,7 @@ func (r *AppChecksResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
-	if err := r.apply(data.App.ValueString(), true); err != nil {
+	if err := r.apply(ctx, data.App.ValueString(), true); err != nil {
 		resp.Diagnostics.AddError("Error restoring app checks state", err.Error())
 	}
 }

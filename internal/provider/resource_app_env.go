@@ -74,7 +74,7 @@ func (r *AppEnvResource) Configure(ctx context.Context, req resource.ConfigureRe
 	r.client = client
 }
 
-func (r *AppEnvResource) set(app string, env map[string]string) error {
+func (r *AppEnvResource) set(ctx context.Context, app string, env map[string]string) error {
 	if len(env) == 0 {
 		return nil
 	}
@@ -82,16 +82,16 @@ func (r *AppEnvResource) set(app string, env map[string]string) error {
 	for k, v := range env {
 		args = append(args, k+"="+v)
 	}
-	_, err := r.client.RunChecked(args...)
+	_, err := r.client.RunChecked(ctx, args...)
 	return err
 }
 
-func (r *AppEnvResource) unset(app string, keys []string) error {
+func (r *AppEnvResource) unset(ctx context.Context, app string, keys []string) error {
 	if len(keys) == 0 {
 		return nil
 	}
 	args := append([]string{"config:unset", app}, keys...)
-	_, err := r.client.RunChecked(args...)
+	_, err := r.client.RunChecked(ctx, args...)
 	return err
 }
 
@@ -109,7 +109,7 @@ func (r *AppEnvResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	if err := r.set(app, env); err != nil {
+	if err := r.set(ctx, app, env); err != nil {
 		resp.Diagnostics.AddError("Error setting app env vars", err.Error())
 		return
 	}
@@ -134,7 +134,7 @@ func (r *AppEnvResource) Read(ctx context.Context, req resource.ReadRequest, res
 
 	current := make(map[string]string, len(env))
 	for key := range env {
-		res, err := r.client.Run("config:get", app, key)
+		res, err := r.client.Run(ctx, "config:get", app, key)
 		if err != nil {
 			resp.Diagnostics.AddError("Error reading app env var", err.Error())
 			return
@@ -189,11 +189,11 @@ func (r *AppEnvResource) Update(ctx context.Context, req resource.UpdateRequest,
 		}
 	}
 
-	if err := r.unset(app, toUnset); err != nil {
+	if err := r.unset(ctx, app, toUnset); err != nil {
 		resp.Diagnostics.AddError("Error unsetting app env vars", err.Error())
 		return
 	}
-	if err := r.set(app, toSet); err != nil {
+	if err := r.set(ctx, app, toSet); err != nil {
 		resp.Diagnostics.AddError("Error updating app env vars", err.Error())
 		return
 	}
@@ -220,7 +220,7 @@ func (r *AppEnvResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		keys = append(keys, key)
 	}
 
-	if err := r.unset(data.App.ValueString(), keys); err != nil {
+	if err := r.unset(ctx, data.App.ValueString(), keys); err != nil {
 		resp.Diagnostics.AddError("Error unsetting app env vars", err.Error())
 	}
 }

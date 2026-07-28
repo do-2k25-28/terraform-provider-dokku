@@ -79,18 +79,18 @@ func (r *AppTraefikResource) Configure(ctx context.Context, req resource.Configu
 
 // set adds or overwrites a single Traefik label. traefik:labels:add only
 // accepts one label per invocation, unlike e.g. config:set.
-func (r *AppTraefikResource) set(app string, labels map[string]string) error {
+func (r *AppTraefikResource) set(ctx context.Context, app string, labels map[string]string) error {
 	for name, value := range labels {
-		if _, err := r.client.RunChecked("traefik:labels:add", app, name, value); err != nil {
+		if _, err := r.client.RunChecked(ctx, "traefik:labels:add", app, name, value); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *AppTraefikResource) unset(app string, names []string) error {
+func (r *AppTraefikResource) unset(ctx context.Context, app string, names []string) error {
 	for _, name := range names {
-		if _, err := r.client.RunChecked("traefik:labels:remove", app, name); err != nil {
+		if _, err := r.client.RunChecked(ctx, "traefik:labels:remove", app, name); err != nil {
 			return err
 		}
 	}
@@ -111,7 +111,7 @@ func (r *AppTraefikResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	if err := r.set(app, labels); err != nil {
+	if err := r.set(ctx, app, labels); err != nil {
 		resp.Diagnostics.AddError("Error setting app traefik labels", err.Error())
 		return
 	}
@@ -136,7 +136,7 @@ func (r *AppTraefikResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	current := make(map[string]string, len(labels))
 	for name := range labels {
-		res, err := r.client.Run("traefik:labels:show", app, name)
+		res, err := r.client.Run(ctx, "traefik:labels:show", app, name)
 		if err != nil {
 			resp.Diagnostics.AddError("Error reading app traefik label", err.Error())
 			return
@@ -196,11 +196,11 @@ func (r *AppTraefikResource) Update(ctx context.Context, req resource.UpdateRequ
 		}
 	}
 
-	if err := r.unset(app, toUnset); err != nil {
+	if err := r.unset(ctx, app, toUnset); err != nil {
 		resp.Diagnostics.AddError("Error removing app traefik labels", err.Error())
 		return
 	}
-	if err := r.set(app, toSet); err != nil {
+	if err := r.set(ctx, app, toSet); err != nil {
 		resp.Diagnostics.AddError("Error updating app traefik labels", err.Error())
 		return
 	}
@@ -227,7 +227,7 @@ func (r *AppTraefikResource) Delete(ctx context.Context, req resource.DeleteRequ
 		names = append(names, name)
 	}
 
-	if err := r.unset(data.App.ValueString(), names); err != nil {
+	if err := r.unset(ctx, data.App.ValueString(), names); err != nil {
 		resp.Diagnostics.AddError("Error removing app traefik labels", err.Error())
 	}
 }

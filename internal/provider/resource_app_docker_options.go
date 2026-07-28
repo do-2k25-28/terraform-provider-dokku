@@ -106,25 +106,25 @@ func splitOptionArgs(option string) []string {
 	return strings.Fields(option)
 }
 
-func (r *AppDockerOptionsResource) add(app string, processes, phases []string, option string) error {
+func (r *AppDockerOptionsResource) add(ctx context.Context, app string, processes, phases []string, option string) error {
 	args := []string{"docker-options:add"}
 	for _, p := range processes {
 		args = append(args, "--process", p)
 	}
 	args = append(args, app, strings.Join(phases, ","))
 	args = append(args, splitOptionArgs(option)...)
-	_, err := r.client.RunChecked(args...)
+	_, err := r.client.RunChecked(ctx, args...)
 	return err
 }
 
-func (r *AppDockerOptionsResource) remove(app string, processes, phases []string, option string) error {
+func (r *AppDockerOptionsResource) remove(ctx context.Context, app string, processes, phases []string, option string) error {
 	args := []string{"docker-options:remove"}
 	for _, p := range processes {
 		args = append(args, "--process", p)
 	}
 	args = append(args, app, strings.Join(phases, ","))
 	args = append(args, splitOptionArgs(option)...)
-	_, err := r.client.RunChecked(args...)
+	_, err := r.client.RunChecked(ctx, args...)
 	return err
 }
 
@@ -133,8 +133,8 @@ func (r *AppDockerOptionsResource) remove(app string, processes, phases []string
 // string fields with these list fields (the raw stored options per phase,
 // and per "deploy.<process>" for process-scoped options), so it can't go
 // through the shared Client.Report helper, which stringifies every value.
-func (r *AppDockerOptionsResource) dockerOptionsReport(app string) (map[string][]string, error) {
-	res, err := r.client.RunChecked("docker-options:report", app, "--format", "json")
+func (r *AppDockerOptionsResource) dockerOptionsReport(ctx context.Context, app string) (map[string][]string, error) {
+	res, err := r.client.RunChecked(ctx, "docker-options:report", app, "--format", "json")
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func (r *AppDockerOptionsResource) Create(ctx context.Context, req resource.Crea
 	processes := stringListToGo(ctx, data.Processes)
 	option := data.Option.ValueString()
 
-	if err := r.add(app, processes, phases, option); err != nil {
+	if err := r.add(ctx, app, processes, phases, option); err != nil {
 		resp.Diagnostics.AddError("Error adding docker option", err.Error())
 		return
 	}
@@ -228,7 +228,7 @@ func (r *AppDockerOptionsResource) Read(ctx context.Context, req resource.ReadRe
 	processes := stringListToGo(ctx, data.Processes)
 	option := data.Option.ValueString()
 
-	lists, err := r.dockerOptionsReport(app)
+	lists, err := r.dockerOptionsReport(ctx, app)
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -262,11 +262,11 @@ func (r *AppDockerOptionsResource) Update(ctx context.Context, req resource.Upda
 	stateOption := state.Option.ValueString()
 
 	if !equalStringSlices(planPhases, statePhases) || !equalStringSlices(planProcesses, stateProcesses) || planOption != stateOption {
-		if err := r.remove(app, stateProcesses, statePhases, stateOption); err != nil {
+		if err := r.remove(ctx, app, stateProcesses, statePhases, stateOption); err != nil {
 			resp.Diagnostics.AddError("Error removing old docker option", err.Error())
 			return
 		}
-		if err := r.add(app, planProcesses, planPhases, planOption); err != nil {
+		if err := r.add(ctx, app, planProcesses, planPhases, planOption); err != nil {
 			resp.Diagnostics.AddError("Error adding new docker option", err.Error())
 			return
 		}
@@ -288,7 +288,7 @@ func (r *AppDockerOptionsResource) Delete(ctx context.Context, req resource.Dele
 	processes := stringListToGo(ctx, data.Processes)
 	option := data.Option.ValueString()
 
-	if err := r.remove(app, processes, phases, option); err != nil {
+	if err := r.remove(ctx, app, processes, phases, option); err != nil {
 		resp.Diagnostics.AddError("Error removing docker option", err.Error())
 	}
 }

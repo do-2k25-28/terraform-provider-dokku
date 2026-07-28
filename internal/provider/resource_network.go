@@ -75,7 +75,7 @@ func (r *NetworkResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	name := data.Name.ValueString()
-	if _, err := r.client.RunChecked("network:create", name); err != nil {
+	if _, err := r.client.RunChecked(ctx, "network:create", name); err != nil {
 		resp.Diagnostics.AddError("Error creating network", err.Error())
 		return
 	}
@@ -92,7 +92,7 @@ func (r *NetworkResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	name := data.Name.ValueString()
-	res, err := r.client.Run("network:info", name, "--format", "json")
+	res, err := r.client.Run(ctx, "network:info", name, "--format", "json")
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading network", err.Error())
 		return
@@ -120,7 +120,7 @@ func (r *NetworkResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	if _, err := r.client.RunChecked("network:destroy", "--force", data.Name.ValueString()); err != nil {
+	if _, err := r.client.RunChecked(ctx, "network:destroy", "--force", data.Name.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error destroying network", err.Error())
 	}
 }

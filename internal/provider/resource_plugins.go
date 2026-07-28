@@ -68,13 +68,13 @@ func (r *PluginsResource) Configure(ctx context.Context, req resource.ConfigureR
 	r.client = client
 }
 
-func (r *PluginsResource) install(name, url string) error {
-	_, err := r.client.RunChecked("plugin:install", url, "--name", name)
+func (r *PluginsResource) install(ctx context.Context, name, url string) error {
+	_, err := r.client.RunChecked(ctx, "plugin:install", url, "--name", name)
 	return err
 }
 
-func (r *PluginsResource) uninstall(name string) error {
-	_, err := r.client.RunChecked("plugin:uninstall", name)
+func (r *PluginsResource) uninstall(ctx context.Context, name string) error {
+	_, err := r.client.RunChecked(ctx, "plugin:uninstall", name)
 	return err
 }
 
@@ -82,8 +82,8 @@ func (r *PluginsResource) uninstall(name string) error {
 // installed plugin (`dokku plugin:list --format json`), keyed by plugin
 // name. Core plugins and any plugin not installed from git have an empty
 // source URL.
-func (r *PluginsResource) sourceURLs() (map[string]string, error) {
-	res, err := r.client.RunChecked("plugin:list", "--format", "json")
+func (r *PluginsResource) sourceURLs(ctx context.Context) (map[string]string, error) {
+	res, err := r.client.RunChecked(ctx, "plugin:list", "--format", "json")
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (r *PluginsResource) Create(ctx context.Context, req resource.CreateRequest
 	sort.Strings(names)
 
 	for _, name := range names {
-		if err := r.install(name, plugins[name]); err != nil {
+		if err := r.install(ctx, name, plugins[name]); err != nil {
 			resp.Diagnostics.AddError("Error installing plugin", err.Error())
 			return
 		}
@@ -146,7 +146,7 @@ func (r *PluginsResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	current, err := r.sourceURLs()
+	current, err := r.sourceURLs(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading installed plugins", err.Error())
 		return
@@ -210,7 +210,7 @@ func (r *PluginsResource) Update(ctx context.Context, req resource.UpdateRequest
 	sort.Strings(installNames)
 
 	for _, name := range toUninstall {
-		if err := r.uninstall(name); err != nil {
+		if err := r.uninstall(ctx, name); err != nil {
 			resp.Diagnostics.AddError("Error uninstalling plugin", err.Error())
 			return
 		}
@@ -220,12 +220,12 @@ func (r *PluginsResource) Update(ctx context.Context, req resource.UpdateRequest
 		// "update source" command, so re-point it by uninstalling and
 		// reinstalling from the new URL.
 		if _, existed := statePlugins[name]; existed {
-			if err := r.uninstall(name); err != nil {
+			if err := r.uninstall(ctx, name); err != nil {
 				resp.Diagnostics.AddError("Error uninstalling plugin", err.Error())
 				return
 			}
 		}
-		if err := r.install(name, toInstall[name]); err != nil {
+		if err := r.install(ctx, name, toInstall[name]); err != nil {
 			resp.Diagnostics.AddError("Error installing plugin", err.Error())
 			return
 		}
@@ -255,7 +255,7 @@ func (r *PluginsResource) Delete(ctx context.Context, req resource.DeleteRequest
 	sort.Strings(names)
 
 	for _, name := range names {
-		if err := r.uninstall(name); err != nil {
+		if err := r.uninstall(ctx, name); err != nil {
 			resp.Diagnostics.AddError("Error uninstalling plugin", err.Error())
 		}
 	}

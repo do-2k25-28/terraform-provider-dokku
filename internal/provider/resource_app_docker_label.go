@@ -133,18 +133,18 @@ func dockerLabelOption(key, value string) string {
 	return "'--label \"" + key + "=" + value + "\"'"
 }
 
-func (r *AppDockerLabelResource) add(app string, labels map[string]string) error {
+func (r *AppDockerLabelResource) add(ctx context.Context, app string, labels map[string]string) error {
 	for key, value := range labels {
-		if _, err := r.client.RunChecked("docker-options:add", app, dockerLabelPhase, dockerLabelOption(key, value)); err != nil {
+		if _, err := r.client.RunChecked(ctx, "docker-options:add", app, dockerLabelPhase, dockerLabelOption(key, value)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *AppDockerLabelResource) remove(app string, labels map[string]string) error {
+func (r *AppDockerLabelResource) remove(ctx context.Context, app string, labels map[string]string) error {
 	for key, value := range labels {
-		if _, err := r.client.RunChecked("docker-options:remove", app, dockerLabelPhase, dockerLabelOption(key, value)); err != nil {
+		if _, err := r.client.RunChecked(ctx, "docker-options:remove", app, dockerLabelPhase, dockerLabelOption(key, value)); err != nil {
 			return err
 		}
 	}
@@ -156,8 +156,8 @@ func (r *AppDockerLabelResource) remove(app string, labels map[string]string) er
 // a map. It can't go through the shared Client.Report helper, which
 // stringifies every value, since the report mixes flat string fields with
 // "<phase>-list" array fields.
-func (r *AppDockerLabelResource) dockerLabels(app string) (map[string]string, error) {
-	res, err := r.client.RunChecked("docker-options:report", app, "--format", "json")
+func (r *AppDockerLabelResource) dockerLabels(ctx context.Context, app string) (map[string]string, error) {
+	res, err := r.client.RunChecked(ctx, "docker-options:report", app, "--format", "json")
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +198,7 @@ func (r *AppDockerLabelResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	if err := r.add(app, labels); err != nil {
+	if err := r.add(ctx, app, labels); err != nil {
 		resp.Diagnostics.AddError("Error adding app docker labels", err.Error())
 		return
 	}
@@ -221,7 +221,7 @@ func (r *AppDockerLabelResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	current, err := r.dockerLabels(app)
+	current, err := r.dockerLabels(ctx, app)
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -278,11 +278,11 @@ func (r *AppDockerLabelResource) Update(ctx context.Context, req resource.Update
 		}
 	}
 
-	if err := r.remove(app, toRemove); err != nil {
+	if err := r.remove(ctx, app, toRemove); err != nil {
 		resp.Diagnostics.AddError("Error removing old app docker labels", err.Error())
 		return
 	}
-	if err := r.add(app, toAdd); err != nil {
+	if err := r.add(ctx, app, toAdd); err != nil {
 		resp.Diagnostics.AddError("Error adding new app docker labels", err.Error())
 		return
 	}
@@ -304,7 +304,7 @@ func (r *AppDockerLabelResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
-	if err := r.remove(data.App.ValueString(), labels); err != nil {
+	if err := r.remove(ctx, data.App.ValueString(), labels); err != nil {
 		resp.Diagnostics.AddError("Error removing app docker labels", err.Error())
 	}
 }

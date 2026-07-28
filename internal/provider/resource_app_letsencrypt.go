@@ -78,11 +78,11 @@ func (r *AppLetsencryptResource) Configure(ctx context.Context, req resource.Con
 	r.client = client
 }
 
-func (r *AppLetsencryptResource) setEmail(app, email string) error {
+func (r *AppLetsencryptResource) setEmail(ctx context.Context, app, email string) error {
 	if email == "" {
 		return nil
 	}
-	_, err := r.client.RunChecked("letsencrypt:set", app, "email", email)
+	_, err := r.client.RunChecked(ctx, "letsencrypt:set", app, "email", email)
 	return err
 }
 
@@ -94,12 +94,12 @@ func (r *AppLetsencryptResource) Create(ctx context.Context, req resource.Create
 	}
 
 	app := data.App.ValueString()
-	if err := r.setEmail(app, data.Email.ValueString()); err != nil {
+	if err := r.setEmail(ctx, app, data.Email.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error setting letsencrypt email", err.Error())
 		return
 	}
 
-	if _, err := r.client.RunChecked("letsencrypt:enable", app); err != nil {
+	if _, err := r.client.RunChecked(ctx, "letsencrypt:enable", app); err != nil {
 		resp.Diagnostics.AddError("Error enabling letsencrypt", err.Error())
 		return
 	}
@@ -115,7 +115,7 @@ func (r *AppLetsencryptResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	report, err := r.client.Report("letsencrypt", data.App.ValueString())
+	report, err := r.client.Report(ctx, "letsencrypt", data.App.ValueString())
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -140,12 +140,12 @@ func (r *AppLetsencryptResource) Update(ctx context.Context, req resource.Update
 
 	app := plan.App.ValueString()
 	if plan.Email.ValueString() != state.Email.ValueString() {
-		if err := r.setEmail(app, plan.Email.ValueString()); err != nil {
+		if err := r.setEmail(ctx, app, plan.Email.ValueString()); err != nil {
 			resp.Diagnostics.AddError("Error updating letsencrypt email", err.Error())
 			return
 		}
 		// Re-issue so the new contact email takes effect on the cert.
-		if _, err := r.client.RunChecked("letsencrypt:enable", app); err != nil {
+		if _, err := r.client.RunChecked(ctx, "letsencrypt:enable", app); err != nil {
 			resp.Diagnostics.AddError("Error re-enabling letsencrypt", err.Error())
 			return
 		}
@@ -162,7 +162,7 @@ func (r *AppLetsencryptResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
-	if _, err := r.client.RunChecked("letsencrypt:disable", data.App.ValueString()); err != nil {
+	if _, err := r.client.RunChecked(ctx, "letsencrypt:disable", data.App.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error disabling letsencrypt", err.Error())
 	}
 }

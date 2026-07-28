@@ -113,8 +113,8 @@ func parseServiceInfo(output string) map[string]string {
 	return out
 }
 
-func (r *serviceResource) fetchInfo(name string) (map[string]string, error) {
-	res, err := r.client.RunChecked(r.plugin+":info", name)
+func (r *serviceResource) fetchInfo(ctx context.Context, name string) (map[string]string, error) {
+	res, err := r.client.RunChecked(ctx, r.plugin+":info", name)
 	if err != nil {
 		return nil, err
 	}
@@ -134,18 +134,18 @@ func (r *serviceResource) Create(ctx context.Context, req resource.CreateRequest
 		args = append(args, "--image-version", data.ImageVersion.ValueString())
 	}
 
-	if _, err := r.client.RunChecked(args...); err != nil {
+	if _, err := r.client.RunChecked(ctx, args...); err != nil {
 		resp.Diagnostics.AddError("Error creating "+r.plugin+" service", err.Error())
 		return
 	}
 
 	data.ID = types.StringValue(name)
-	r.populate(&data)
+	r.populate(ctx, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *serviceResource) populate(data *ServiceResourceModel) {
-	info, err := r.fetchInfo(data.Name.ValueString())
+func (r *serviceResource) populate(ctx context.Context, data *ServiceResourceModel) {
+	info, err := r.fetchInfo(ctx, data.Name.ValueString())
 	if err != nil {
 		return
 	}
@@ -169,7 +169,7 @@ func (r *serviceResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	name := data.Name.ValueString()
-	res, err := r.client.Run(r.plugin+":exists", name)
+	res, err := r.client.Run(ctx, r.plugin+":exists", name)
 	if err != nil {
 		resp.Diagnostics.AddError("Error checking "+r.plugin+" service", err.Error())
 		return
@@ -180,7 +180,7 @@ func (r *serviceResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	data.ID = types.StringValue(name)
-	r.populate(&data)
+	r.populate(ctx, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -195,14 +195,14 @@ func (r *serviceResource) Update(ctx context.Context, req resource.UpdateRequest
 
 	name := plan.Name.ValueString()
 	if plan.ImageVersion.ValueString() != state.ImageVersion.ValueString() && plan.ImageVersion.ValueString() != "" {
-		if _, err := r.client.RunChecked(r.plugin+":upgrade", name, "--image-version", plan.ImageVersion.ValueString()); err != nil {
+		if _, err := r.client.RunChecked(ctx, r.plugin+":upgrade", name, "--image-version", plan.ImageVersion.ValueString()); err != nil {
 			resp.Diagnostics.AddError("Error upgrading "+r.plugin+" service", err.Error())
 			return
 		}
 	}
 
 	plan.ID = types.StringValue(name)
-	r.populate(&plan)
+	r.populate(ctx, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -213,7 +213,7 @@ func (r *serviceResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	if _, err := r.client.RunChecked(r.plugin+":destroy", data.Name.ValueString(), "--force"); err != nil {
+	if _, err := r.client.RunChecked(ctx, r.plugin+":destroy", data.Name.ValueString(), "--force"); err != nil {
 		resp.Diagnostics.AddError("Error destroying "+r.plugin+" service", err.Error())
 	}
 }
@@ -302,7 +302,7 @@ func (r *serviceLinkResource) Create(ctx context.Context, req resource.CreateReq
 		args = append(args, "--alias", data.Alias.ValueString())
 	}
 
-	if _, err := r.client.RunChecked(args...); err != nil {
+	if _, err := r.client.RunChecked(ctx, args...); err != nil {
 		resp.Diagnostics.AddError("Error linking "+r.plugin+" service", err.Error())
 		return
 	}
@@ -318,7 +318,7 @@ func (r *serviceLinkResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	res, err := r.client.Run(r.plugin+":links", data.Service.ValueString())
+	res, err := r.client.Run(ctx, r.plugin+":links", data.Service.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading "+r.plugin+" links", err.Error())
 		return
@@ -358,7 +358,7 @@ func (r *serviceLinkResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	if _, err := r.client.RunChecked(r.plugin+":unlink", data.Service.ValueString(), data.App.ValueString()); err != nil {
+	if _, err := r.client.RunChecked(ctx, r.plugin+":unlink", data.Service.ValueString(), data.App.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error unlinking "+r.plugin+" service", err.Error())
 	}
 }

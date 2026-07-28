@@ -67,12 +67,12 @@ func (r *NginxResource) Configure(ctx context.Context, req resource.ConfigureReq
 	r.client = client
 }
 
-func (r *NginxResource) apply(enabled bool) error {
+func (r *NginxResource) apply(ctx context.Context, enabled bool) error {
 	if enabled {
-		_, err := r.client.RunChecked("nginx:start")
+		_, err := r.client.RunChecked(ctx, "nginx:start")
 		return err
 	}
-	_, err := r.client.RunChecked("nginx:stop")
+	_, err := r.client.RunChecked(ctx, "nginx:stop")
 	return err
 }
 
@@ -83,7 +83,7 @@ func (r *NginxResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	if err := r.apply(data.Enabled.ValueBool()); err != nil {
+	if err := r.apply(ctx, data.Enabled.ValueBool()); err != nil {
 		resp.Diagnostics.AddError("Error setting nginx server state", err.Error())
 		return
 	}
@@ -112,7 +112,7 @@ func (r *NginxResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
-	if err := r.apply(plan.Enabled.ValueBool()); err != nil {
+	if err := r.apply(ctx, plan.Enabled.ValueBool()); err != nil {
 		resp.Diagnostics.AddError("Error updating nginx server state", err.Error())
 		return
 	}
@@ -125,7 +125,7 @@ func (r *NginxResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	// Restore Dokku's default of a running nginx server when this resource
 	// is no longer managed, mirroring how other global toggle/config
 	// resources reset to their default on delete.
-	if err := r.apply(true); err != nil {
+	if err := r.apply(ctx, true); err != nil {
 		resp.Diagnostics.AddError("Error restarting nginx server", err.Error())
 	}
 }

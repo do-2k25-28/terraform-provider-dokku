@@ -101,12 +101,12 @@ func (r *StorageResource) Create(ctx context.Context, req resource.CreateRequest
 		args = append(args, data.Path.ValueString())
 	}
 
-	if _, err := r.client.RunChecked(args...); err != nil {
+	if _, err := r.client.RunChecked(ctx, args...); err != nil {
 		resp.Diagnostics.AddError("Error creating storage entry", err.Error())
 		return
 	}
 
-	info, err := r.client.Run("storage:info", data.Name.ValueString(), "--format", "json")
+	info, err := r.client.Run(ctx, "storage:info", data.Name.ValueString(), "--format", "json")
 	if err == nil && info.ExitCode == 0 {
 		data.HostPath = types.StringValue(parseJSONField(info.Stdout, "host_path"))
 	}
@@ -121,7 +121,7 @@ func (r *StorageResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	res, err := r.client.Run("storage:info", data.Name.ValueString(), "--format", "json")
+	res, err := r.client.Run(ctx, "storage:info", data.Name.ValueString(), "--format", "json")
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading storage entry", err.Error())
 		return
@@ -152,7 +152,7 @@ func (r *StorageResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 
 	if chown := plan.Chown.ValueString(); chown != "" && chown != state.Chown.ValueString() {
-		if _, err := r.client.RunChecked("storage:set", plan.Name.ValueString(), "--chown", chown); err != nil {
+		if _, err := r.client.RunChecked(ctx, "storage:set", plan.Name.ValueString(), "--chown", chown); err != nil {
 			resp.Diagnostics.AddError("Error updating storage chown", err.Error())
 			return
 		}
@@ -168,7 +168,7 @@ func (r *StorageResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	if _, err := r.client.RunChecked("storage:destroy", data.Name.ValueString(), "--force"); err != nil {
+	if _, err := r.client.RunChecked(ctx, "storage:destroy", data.Name.ValueString(), "--force"); err != nil {
 		resp.Diagnostics.AddError("Error destroying storage entry", err.Error())
 	}
 }

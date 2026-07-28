@@ -90,8 +90,8 @@ func (r *StorageAssignmentResource) Configure(ctx context.Context, req resource.
 	r.client = client
 }
 
-func (r *StorageAssignmentResource) hostPath(name string) (string, error) {
-	res, err := r.client.RunChecked("storage:info", name, "--format", "json")
+func (r *StorageAssignmentResource) hostPath(ctx context.Context, name string) (string, error) {
+	res, err := r.client.RunChecked(ctx, "storage:info", name, "--format", "json")
 	if err != nil {
 		return "", err
 	}
@@ -113,14 +113,14 @@ func (r *StorageAssignmentResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	hp, err := r.hostPath(data.StorageName.ValueString())
+	hp, err := r.hostPath(ctx, data.StorageName.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Error resolving storage entry", err.Error())
 		return
 	}
 
 	spec := mountSpec(hp, data.Destination.ValueString())
-	if _, err := r.client.RunChecked("storage:mount", data.App.ValueString(), spec); err != nil {
+	if _, err := r.client.RunChecked(ctx, "storage:mount", data.App.ValueString(), spec); err != nil {
 		resp.Diagnostics.AddError("Error mounting storage entry", err.Error())
 		return
 	}
@@ -137,7 +137,7 @@ func (r *StorageAssignmentResource) Read(ctx context.Context, req resource.ReadR
 		return
 	}
 
-	res, err := r.client.Run("storage:list", data.App.ValueString(), "--format", "json")
+	res, err := r.client.Run(ctx, "storage:list", data.App.ValueString(), "--format", "json")
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading storage mounts", err.Error())
 		return
@@ -147,7 +147,7 @@ func (r *StorageAssignmentResource) Read(ctx context.Context, req resource.ReadR
 		return
 	}
 
-	hp, err := r.hostPath(data.StorageName.ValueString())
+	hp, err := r.hostPath(ctx, data.StorageName.ValueString())
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -193,7 +193,7 @@ func (r *StorageAssignmentResource) Delete(ctx context.Context, req resource.Del
 	hp := data.HostPath.ValueString()
 	if hp == "" {
 		var err error
-		hp, err = r.hostPath(data.StorageName.ValueString())
+		hp, err = r.hostPath(ctx, data.StorageName.ValueString())
 		if err != nil {
 			// Storage entry already gone; nothing left to unmount.
 			return
@@ -201,7 +201,7 @@ func (r *StorageAssignmentResource) Delete(ctx context.Context, req resource.Del
 	}
 	spec := mountSpec(hp, data.Destination.ValueString())
 
-	if _, err := r.client.RunChecked("storage:unmount", data.App.ValueString(), spec); err != nil {
+	if _, err := r.client.RunChecked(ctx, "storage:unmount", data.App.ValueString(), spec); err != nil {
 		resp.Diagnostics.AddError("Error unmounting storage entry", err.Error())
 	}
 }

@@ -73,12 +73,12 @@ func (r *AppProxyResource) Configure(ctx context.Context, req resource.Configure
 	r.client = client
 }
 
-func (r *AppProxyResource) apply(app string, enabled bool) error {
+func (r *AppProxyResource) apply(ctx context.Context, app string, enabled bool) error {
 	if enabled {
-		_, err := r.client.RunChecked("proxy:enable", app)
+		_, err := r.client.RunChecked(ctx, "proxy:enable", app)
 		return err
 	}
-	_, err := r.client.RunChecked("proxy:disable", app)
+	_, err := r.client.RunChecked(ctx, "proxy:disable", app)
 	return err
 }
 
@@ -89,7 +89,7 @@ func (r *AppProxyResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	if err := r.apply(data.App.ValueString(), data.Enabled.ValueBool()); err != nil {
+	if err := r.apply(ctx, data.App.ValueString(), data.Enabled.ValueBool()); err != nil {
 		resp.Diagnostics.AddError("Error setting app proxy state", err.Error())
 		return
 	}
@@ -105,7 +105,7 @@ func (r *AppProxyResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	report, err := r.client.Report("proxy", data.App.ValueString())
+	report, err := r.client.Report(ctx, "proxy", data.App.ValueString())
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -123,7 +123,7 @@ func (r *AppProxyResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	if err := r.apply(data.App.ValueString(), data.Enabled.ValueBool()); err != nil {
+	if err := r.apply(ctx, data.App.ValueString(), data.Enabled.ValueBool()); err != nil {
 		resp.Diagnostics.AddError("Error updating app proxy state", err.Error())
 		return
 	}
@@ -139,7 +139,7 @@ func (r *AppProxyResource) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
-	if err := r.apply(data.App.ValueString(), true); err != nil {
+	if err := r.apply(ctx, data.App.ValueString(), true); err != nil {
 		resp.Diagnostics.AddError("Error restoring app proxy state", err.Error())
 	}
 }

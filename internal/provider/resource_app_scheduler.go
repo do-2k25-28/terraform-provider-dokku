@@ -73,8 +73,8 @@ func (r *AppSchedulerResource) Configure(ctx context.Context, req resource.Confi
 	r.client = client
 }
 
-func (r *AppSchedulerResource) set(app, value string) error {
-	_, err := r.client.RunChecked("scheduler:set", app, "selected", value)
+func (r *AppSchedulerResource) set(ctx context.Context, app, value string) error {
+	_, err := r.client.RunChecked(ctx, "scheduler:set", app, "selected", value)
 	return err
 }
 
@@ -85,7 +85,7 @@ func (r *AppSchedulerResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	if err := r.set(data.App.ValueString(), data.Scheduler.ValueString()); err != nil {
+	if err := r.set(ctx, data.App.ValueString(), data.Scheduler.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error setting app scheduler", err.Error())
 		return
 	}
@@ -101,7 +101,7 @@ func (r *AppSchedulerResource) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 
-	report, err := r.client.Report("scheduler", data.App.ValueString())
+	report, err := r.client.Report(ctx, "scheduler", data.App.ValueString())
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -119,7 +119,7 @@ func (r *AppSchedulerResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 
-	if err := r.set(data.App.ValueString(), data.Scheduler.ValueString()); err != nil {
+	if err := r.set(ctx, data.App.ValueString(), data.Scheduler.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error updating app scheduler", err.Error())
 		return
 	}
@@ -135,7 +135,7 @@ func (r *AppSchedulerResource) Delete(ctx context.Context, req resource.DeleteRe
 		return
 	}
 
-	if _, err := r.client.RunChecked("scheduler:set", data.App.ValueString(), "selected"); err != nil {
+	if _, err := r.client.RunChecked(ctx, "scheduler:set", data.App.ValueString(), "selected"); err != nil {
 		resp.Diagnostics.AddError("Error clearing app scheduler", err.Error())
 	}
 }

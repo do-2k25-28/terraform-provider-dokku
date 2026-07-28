@@ -74,7 +74,7 @@ func (r *DomainResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	if _, err := r.client.RunChecked("domains:add-global", data.Domain.ValueString()); err != nil {
+	if _, err := r.client.RunChecked(ctx, "domains:add-global", data.Domain.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error adding global domain", err.Error())
 		return
 	}
@@ -90,7 +90,7 @@ func (r *DomainResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	res, err := r.client.Run("domains:report", "--global", "--format", "json")
+	res, err := r.client.Run(ctx, "domains:report", "--global", "--format", "json")
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading global domains", err.Error())
 		return
@@ -130,7 +130,7 @@ func (r *DomainResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 
-	if _, err := r.client.RunChecked("domains:remove-global", data.Domain.ValueString()); err != nil {
+	if _, err := r.client.RunChecked(ctx, "domains:remove-global", data.Domain.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error removing global domain", err.Error())
 	}
 }

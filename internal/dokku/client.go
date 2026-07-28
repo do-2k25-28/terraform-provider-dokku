@@ -4,6 +4,7 @@ package dokku
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -106,9 +108,16 @@ func (c *Client) dial() (*ssh.Client, error) {
 // Run executes a single dokku subcommand (e.g. "apps:create", "myapp") and
 // returns its combined result. Each call opens a fresh SSH session, matching
 // how the Dokku forced-command interface expects to be driven.
-func (c *Client) Run(args ...string) (*Result, error) {
+//
+// The command is logged at debug level (via tflog, so it only surfaces with
+// TF_LOG=DEBUG or lower) before it's sent; the response is never logged,
+// since Dokku output can include secrets (env vars, registry credentials).
+func (c *Client) Run(ctx context.Context, args ...string) (*Result, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	cmd := joinArgs(args)
+	tflog.Debug(ctx, "sending dokku command", map[string]any{"command": cmd})
 
 	conn, err := c.dial()
 	if err != nil {
@@ -126,7 +135,6 @@ func (c *Client) Run(args ...string) (*Result, error) {
 	session.Stdout = &stdout
 	session.Stderr = &stderr
 
-	cmd := joinArgs(args)
 	exitCode := 0
 	if err := session.Run(cmd); err != nil {
 		if exitErr, ok := err.(*ssh.ExitError); ok {
@@ -146,8 +154,8 @@ func (c *Client) Run(args ...string) (*Result, error) {
 
 // RunChecked is like Run but returns an error if the remote command exited
 // non-zero, including captured stdout/stderr in the error message.
-func (c *Client) RunChecked(args ...string) (*Result, error) {
-	res, err := c.Run(args...)
+func (c *Client) RunChecked(ctx context.Context, args ...string) (*Result, error) {
+	res, err := c.Run(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -161,14 +169,14 @@ func (c *Client) RunChecked(args ...string) (*Result, error) {
 // empty, "<resource>:report --format json" for global reports) and decodes
 // the resulting key/value pairs. Dokku's report commands consistently
 // support --format json across plugins.
-func (c *Client) Report(resource, name string) (map[string]string, error) {
+func (c *Client) Report(ctx context.Context, resource, name string) (map[string]string, error) {
 	args := []string{resource + ":report"}
 	if name != "" {
 		args = append(args, name)
 	}
 	args = append(args, "--format", "json")
 
-	res, err := c.Run(args...)
+	res, err := c.Run(ctx, args...)
 	if err != nil {
 		return nil, err
 	}

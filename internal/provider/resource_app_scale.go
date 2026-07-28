@@ -78,7 +78,7 @@ func (r *AppScaleResource) Configure(ctx context.Context, req resource.Configure
 	r.client = client
 }
 
-func (r *AppScaleResource) set(app string, scale map[string]int64) error {
+func (r *AppScaleResource) set(ctx context.Context, app string, scale map[string]int64) error {
 	if len(scale) == 0 {
 		return nil
 	}
@@ -93,14 +93,14 @@ func (r *AppScaleResource) set(app string, scale map[string]int64) error {
 	for _, k := range keys {
 		args = append(args, k+"="+strconv.FormatInt(scale[k], 10))
 	}
-	_, err := r.client.RunChecked(args...)
+	_, err := r.client.RunChecked(ctx, args...)
 	return err
 }
 
 // formations reports the current replica count for every process type Dokku
 // knows about for app, keyed by process type.
-func (r *AppScaleResource) formations(app string) (map[string]int64, error) {
-	res, err := r.client.RunChecked("ps:scale", app, "--format", "json")
+func (r *AppScaleResource) formations(ctx context.Context, app string) (map[string]int64, error) {
+	res, err := r.client.RunChecked(ctx, "ps:scale", app, "--format", "json")
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (r *AppScaleResource) Create(ctx context.Context, req resource.CreateReques
 	app := data.App.ValueString()
 	scale := int64MapToGo(data.Scale)
 
-	if err := r.set(app, scale); err != nil {
+	if err := r.set(ctx, app, scale); err != nil {
 		resp.Diagnostics.AddError("Error setting app scale", err.Error())
 		return
 	}
@@ -149,7 +149,7 @@ func (r *AppScaleResource) Read(ctx context.Context, req resource.ReadRequest, r
 	app := data.App.ValueString()
 	scale := int64MapToGo(data.Scale)
 
-	current, err := r.formations(app)
+	current, err := r.formations(ctx, app)
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -200,7 +200,7 @@ func (r *AppScaleResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
-	if err := r.set(app, toSet); err != nil {
+	if err := r.set(ctx, app, toSet); err != nil {
 		resp.Diagnostics.AddError("Error updating app scale", err.Error())
 		return
 	}
@@ -222,7 +222,7 @@ func (r *AppScaleResource) Delete(ctx context.Context, req resource.DeleteReques
 		toZero[key] = 0
 	}
 
-	if err := r.set(data.App.ValueString(), toZero); err != nil {
+	if err := r.set(ctx, data.App.ValueString(), toZero); err != nil {
 		resp.Diagnostics.AddError("Error resetting app scale", err.Error())
 	}
 }

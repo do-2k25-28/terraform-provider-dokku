@@ -94,18 +94,18 @@ func (r *AppNetworkResource) Configure(ctx context.Context, req resource.Configu
 	r.client = client
 }
 
-func (r *AppNetworkResource) setListProperty(app, property string, values []string) error {
+func (r *AppNetworkResource) setListProperty(ctx context.Context, app, property string, values []string) error {
 	args := append([]string{"network:set", app, property}, values...)
-	_, err := r.client.RunChecked(args...)
+	_, err := r.client.RunChecked(ctx, args...)
 	return err
 }
 
-func (r *AppNetworkResource) setStringProperty(app, property, value string) error {
+func (r *AppNetworkResource) setStringProperty(ctx context.Context, app, property, value string) error {
 	if value == "" {
-		_, err := r.client.RunChecked("network:set", app, property)
+		_, err := r.client.RunChecked(ctx, "network:set", app, property)
 		return err
 	}
-	_, err := r.client.RunChecked("network:set", app, property, value)
+	_, err := r.client.RunChecked(ctx, "network:set", app, property, value)
 	return err
 }
 
@@ -132,25 +132,25 @@ func (r *AppNetworkResource) Create(ctx context.Context, req resource.CreateRequ
 	app := data.App.ValueString()
 
 	if !data.AttachPostCreate.IsNull() {
-		if err := r.setListProperty(app, "attach-post-create", stringListToGo(ctx, data.AttachPostCreate)); err != nil {
+		if err := r.setListProperty(ctx, app, "attach-post-create", stringListToGo(ctx, data.AttachPostCreate)); err != nil {
 			resp.Diagnostics.AddError("Error setting attach_post_create", err.Error())
 			return
 		}
 	}
 	if !data.AttachPostDeploy.IsNull() {
-		if err := r.setListProperty(app, "attach-post-deploy", stringListToGo(ctx, data.AttachPostDeploy)); err != nil {
+		if err := r.setListProperty(ctx, app, "attach-post-deploy", stringListToGo(ctx, data.AttachPostDeploy)); err != nil {
 			resp.Diagnostics.AddError("Error setting attach_post_deploy", err.Error())
 			return
 		}
 	}
 	if !data.InitialNetwork.IsNull() {
-		if err := r.setStringProperty(app, "initial-network", data.InitialNetwork.ValueString()); err != nil {
+		if err := r.setStringProperty(ctx, app, "initial-network", data.InitialNetwork.ValueString()); err != nil {
 			resp.Diagnostics.AddError("Error setting initial_network", err.Error())
 			return
 		}
 	}
 	if !data.BindAllInterfaces.IsNull() {
-		if err := r.setStringProperty(app, "bind-all-interfaces", strconv.FormatBool(data.BindAllInterfaces.ValueBool())); err != nil {
+		if err := r.setStringProperty(ctx, app, "bind-all-interfaces", strconv.FormatBool(data.BindAllInterfaces.ValueBool())); err != nil {
 			resp.Diagnostics.AddError("Error setting bind_all_interfaces", err.Error())
 			return
 		}
@@ -168,7 +168,7 @@ func (r *AppNetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	app := data.App.ValueString()
-	report, err := r.client.Report("network", app)
+	report, err := r.client.Report(ctx, "network", app)
 	if err != nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -222,7 +222,7 @@ func (r *AppNetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 	planCreate := stringListToGo(ctx, plan.AttachPostCreate)
 	stateCreate := stringListToGo(ctx, state.AttachPostCreate)
 	if !equalStringSlices(planCreate, stateCreate) {
-		if err := r.setListProperty(app, "attach-post-create", planCreate); err != nil {
+		if err := r.setListProperty(ctx, app, "attach-post-create", planCreate); err != nil {
 			resp.Diagnostics.AddError("Error updating attach_post_create", err.Error())
 			return
 		}
@@ -231,14 +231,14 @@ func (r *AppNetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 	planDeploy := stringListToGo(ctx, plan.AttachPostDeploy)
 	stateDeploy := stringListToGo(ctx, state.AttachPostDeploy)
 	if !equalStringSlices(planDeploy, stateDeploy) {
-		if err := r.setListProperty(app, "attach-post-deploy", planDeploy); err != nil {
+		if err := r.setListProperty(ctx, app, "attach-post-deploy", planDeploy); err != nil {
 			resp.Diagnostics.AddError("Error updating attach_post_deploy", err.Error())
 			return
 		}
 	}
 
 	if plan.InitialNetwork.ValueString() != state.InitialNetwork.ValueString() {
-		if err := r.setStringProperty(app, "initial-network", plan.InitialNetwork.ValueString()); err != nil {
+		if err := r.setStringProperty(ctx, app, "initial-network", plan.InitialNetwork.ValueString()); err != nil {
 			resp.Diagnostics.AddError("Error updating initial_network", err.Error())
 			return
 		}
@@ -253,7 +253,7 @@ func (r *AppNetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 		stateBind = strconv.FormatBool(state.BindAllInterfaces.ValueBool())
 	}
 	if planBind != stateBind {
-		if err := r.setStringProperty(app, "bind-all-interfaces", planBind); err != nil {
+		if err := r.setStringProperty(ctx, app, "bind-all-interfaces", planBind); err != nil {
 			resp.Diagnostics.AddError("Error updating bind_all_interfaces", err.Error())
 			return
 		}
@@ -285,22 +285,22 @@ func (r *AppNetworkResource) Delete(ctx context.Context, req resource.DeleteRequ
 	app := data.App.ValueString()
 
 	if !data.AttachPostCreate.IsNull() {
-		if err := r.setListProperty(app, "attach-post-create", nil); err != nil {
+		if err := r.setListProperty(ctx, app, "attach-post-create", nil); err != nil {
 			resp.Diagnostics.AddError("Error clearing attach_post_create", err.Error())
 		}
 	}
 	if !data.AttachPostDeploy.IsNull() {
-		if err := r.setListProperty(app, "attach-post-deploy", nil); err != nil {
+		if err := r.setListProperty(ctx, app, "attach-post-deploy", nil); err != nil {
 			resp.Diagnostics.AddError("Error clearing attach_post_deploy", err.Error())
 		}
 	}
 	if !data.InitialNetwork.IsNull() {
-		if err := r.setStringProperty(app, "initial-network", ""); err != nil {
+		if err := r.setStringProperty(ctx, app, "initial-network", ""); err != nil {
 			resp.Diagnostics.AddError("Error clearing initial_network", err.Error())
 		}
 	}
 	if !data.BindAllInterfaces.IsNull() {
-		if err := r.setStringProperty(app, "bind-all-interfaces", ""); err != nil {
+		if err := r.setStringProperty(ctx, app, "bind-all-interfaces", ""); err != nil {
 			resp.Diagnostics.AddError("Error clearing bind_all_interfaces", err.Error())
 		}
 	}
