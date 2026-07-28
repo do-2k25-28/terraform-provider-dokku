@@ -9,22 +9,32 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"golang.org/x/crypto/ssh"
 )
 
+// maxPoolConnections caps the number of concurrent SSH connections Client
+// will hold open at once. Terraform doesn't communicate its -parallelism
+// value to providers over the plugin protocol, so this can't be read at
+// runtime; 10 matches Terraform's own default -parallelism.
+const maxPoolConnections = 10
+
 // Client runs Dokku CLI commands against a remote host over SSH.
 //
-// Commands are serialized through mu: several Dokku commands (ports:add,
+// Commands run concurrently over an elastic, capped pool of SSH connections
+// (see acquire/release): a call reuses an idle connection when one's
+// available, dials a fresh one while the pool has spare capacity, or blocks
+// until a connection is released once the cap is reached. There is no
+// serialization beyond that cap. Several Dokku commands (ports:add,
 // domains:add, scheduler:set, storage:mount, ...) regenerate the app's proxy
 // config on the remote host as a side effect, and concurrent invocations for
-// the same app race on those files (observed in practice as
-// "mv: cannot create regular file '.../nginx.conf': File exists"). Dokku's
-// CLI is not designed to be driven concurrently, so the provider runs one
-// command at a time regardless of Terraform's own parallelism.
+// the same app can race on those files (observed in practice as "mv: cannot
+// create regular file '.../nginx.conf': File exists" before this pool
+// replaced a single global mutex). Allowing that risk in exchange for
+// letting Terraform's own parallelism actually run applies concurrently was
+// a deliberate tradeoff, not an oversight.
 type Client struct {
 	host      string
 	port      string
@@ -32,7 +42,11 @@ type Client struct {
 	signer    ssh.Signer
 	hostKeyCB ssh.HostKeyCallback
 	timeout   time.Duration
-	mu        sync.Mutex
+
+	// slots bounds the pool to maxPoolConnections: each entry is either an
+	// idle, reusable *ssh.Client or nil (a free slot to dial a new one
+	// into). acquire blocks on this channel when the pool is at capacity.
+	slots chan *ssh.Client
 }
 
 // Config holds the parameters needed to dial a Dokku host.
@@ -63,6 +77,11 @@ func NewClient(cfg Config) (*Client, error) {
 
 	hostKeyCB := ssh.InsecureIgnoreHostKey()
 
+	slots := make(chan *ssh.Client, maxPoolConnections)
+	for range maxPoolConnections {
+		slots <- nil
+	}
+
 	return &Client{
 		host:      cfg.Host,
 		port:      cfg.Port,
@@ -70,6 +89,7 @@ func NewClient(cfg Config) (*Client, error) {
 		signer:    signer,
 		hostKeyCB: hostKeyCB,
 		timeout:   cfg.Timeout,
+		slots:     slots,
 	}, nil
 }
 
@@ -105,43 +125,81 @@ func (c *Client) dial() (*ssh.Client, error) {
 	return ssh.Dial("tcp", addr, config)
 }
 
+// acquire reserves one of the pool's maxPoolConnections slots, blocking if
+// all are currently checked out. It returns a ready-to-use connection: a
+// pooled idle one when the slot held one, or a freshly dialed one otherwise
+// (fresh reports which, since a newly dialed connection failing to open a
+// session is a real error rather than the staleness Run retries around).
+func (c *Client) acquire() (conn *ssh.Client, fresh bool, err error) {
+	slot := <-c.slots
+	if slot != nil {
+		return slot, false, nil
+	}
+	conn, err = c.dial()
+	if err != nil {
+		c.slots <- nil
+		return nil, false, err
+	}
+	return conn, true, nil
+}
+
+// release returns a slot to the pool: conn is kept for reuse by the next
+// acquire, or nil if it was closed because it turned out to be broken.
+func (c *Client) release(conn *ssh.Client) {
+	c.slots <- conn
+}
+
 // Run executes a single dokku subcommand (e.g. "apps:create", "myapp") and
-// returns its combined result. Each call opens a fresh SSH session, matching
-// how the Dokku forced-command interface expects to be driven.
+// returns its combined result. Each call checks out a connection from the
+// pool (see acquire) and opens a fresh SSH session on it, matching how the
+// Dokku forced-command interface expects to be driven.
 //
 // The command is logged at debug level (via tflog, so it only surfaces with
 // TF_LOG=DEBUG or lower) before it's sent; the response is never logged,
 // since Dokku output can include secrets (env vars, registry credentials).
 func (c *Client) Run(ctx context.Context, args ...string) (*Result, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	cmd := joinArgs(args)
 	tflog.Debug(ctx, "sending dokku command", map[string]any{"command": cmd})
 
-	conn, err := c.dial()
+	conn, fresh, err := c.acquire()
 	if err != nil {
 		return nil, fmt.Errorf("dialing %s@%s:%s: %w", c.user, c.host, c.port, err)
 	}
-	defer conn.Close()
 
 	session, err := conn.NewSession()
+	if err != nil && !fresh {
+		// Pooled connection died (e.g. server-side idle timeout); discard it
+		// and retry once against a freshly dialed one.
+		conn.Close()
+		conn, err = c.dial()
+		if err == nil {
+			session, err = conn.NewSession()
+		}
+	}
 	if err != nil {
+		c.release(nil)
 		return nil, fmt.Errorf("opening ssh session: %w", err)
 	}
-	defer session.Close()
 
 	var stdout, stderr bytes.Buffer
 	session.Stdout = &stdout
 	session.Stderr = &stderr
 
 	exitCode := 0
-	if err := session.Run(cmd); err != nil {
-		if exitErr, ok := err.(*ssh.ExitError); ok {
+	runErr := session.Run(cmd)
+	session.Close()
+
+	if runErr != nil {
+		if exitErr, ok := runErr.(*ssh.ExitError); ok {
 			exitCode = exitErr.ExitStatus()
+			c.release(conn)
 		} else {
-			return nil, fmt.Errorf("running %q: %w", cmd, err)
+			conn.Close()
+			c.release(nil)
+			return nil, fmt.Errorf("running %q: %w", cmd, runErr)
 		}
+	} else {
+		c.release(conn)
 	}
 
 	res := &Result{
