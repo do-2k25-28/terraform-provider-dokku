@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -45,7 +46,7 @@ func (r *AppDockerOptionsResource) Metadata(ctx context.Context, req resource.Me
 
 func (r *AppDockerOptionsResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Injects a single custom Docker CLI flag into an app's build, deploy, and/or run containers (`dokku docker-options:add`), e.g. `--memory 1g` or `--build-arg NODE_ENV=production`. See https://dokku.com/docs/advanced-usage/docker-options/.",
+		Description: "Injects a single custom Docker CLI flag into an app's build, deploy, and/or run containers (`dokku docker-options:add`), e.g. `--memory 1g` or `--build-arg NODE_ENV=production`. If the app currently has running containers, changes trigger a `dokku ps:rebuild` so they take effect immediately instead of waiting for the next deploy. See https://dokku.com/docs/advanced-usage/docker-options/.",
 		Attributes: map[string]schema.Attribute{
 			"app": schema.StringAttribute{
 				Required: true,
@@ -126,6 +127,29 @@ func (r *AppDockerOptionsResource) remove(ctx context.Context, app string, proce
 	args = append(args, splitOptionArgs(option)...)
 	_, err := r.client.RunChecked(ctx, args...)
 	return err
+}
+
+// rebuildIfRunning triggers `dokku ps:rebuild <app>` when the app currently
+// has running containers, so a docker-options change (which only affects
+// containers created after it) takes effect immediately instead of waiting
+// on the next deploy. `ps:report --running` reports "true", "false", or
+// "mixed" (some but not all of the app's containers up); anything other
+// than "false" is treated as running. Failure to check the running state or
+// to rebuild is reported as a warning, not an error: the docker-options
+// change itself already succeeded, only this "apply it now" convenience
+// step failed, and the resource's state should still reflect the change.
+func (r *AppDockerOptionsResource) rebuildIfRunning(ctx context.Context, app string, diags *diag.Diagnostics) {
+	report, err := r.client.Report(ctx, "ps", app)
+	if err != nil {
+		diags.AddWarning("Could not determine whether app is running", err.Error())
+		return
+	}
+	if report["running"] == "false" {
+		return
+	}
+	if _, err := r.client.RunChecked(ctx, "ps:rebuild", app); err != nil {
+		diags.AddWarning("Error rebuilding app after docker option change", err.Error())
+	}
 }
 
 // dockerOptionsReport runs `docker-options:report <app> --format json` and
@@ -241,6 +265,7 @@ func (r *AppDockerOptionsResource) Create(ctx context.Context, req resource.Crea
 		resp.Diagnostics.AddError("Error adding docker option", err.Error())
 		return
 	}
+	r.rebuildIfRunning(ctx, app, &resp.Diagnostics)
 
 	data.ID = types.StringValue(dockerOptionsID(app, processes, phases, option))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -300,6 +325,7 @@ func (r *AppDockerOptionsResource) Update(ctx context.Context, req resource.Upda
 			resp.Diagnostics.AddError("Error adding new docker option", err.Error())
 			return
 		}
+		r.rebuildIfRunning(ctx, app, &resp.Diagnostics)
 	}
 
 	plan.ID = types.StringValue(dockerOptionsID(app, planProcesses, planPhases, planOption))
@@ -320,5 +346,7 @@ func (r *AppDockerOptionsResource) Delete(ctx context.Context, req resource.Dele
 
 	if err := r.remove(ctx, app, processes, phases, option); err != nil {
 		resp.Diagnostics.AddError("Error removing docker option", err.Error())
+		return
 	}
+	r.rebuildIfRunning(ctx, app, &resp.Diagnostics)
 }

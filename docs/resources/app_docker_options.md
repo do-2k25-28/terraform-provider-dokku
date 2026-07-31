@@ -3,12 +3,12 @@
 page_title: "dokku_app_docker_options Resource - dokku"
 subcategory: ""
 description: |-
-  Injects a single custom Docker CLI flag into an app's build, deploy, and/or run containers (dokku docker-options:add), e.g. --memory 1g or --build-arg NODE_ENV=production. See https://dokku.com/docs/advanced-usage/docker-options/.
+  Injects a single custom Docker CLI flag into an app's build, deploy, and/or run containers (dokku docker-options:add), e.g. --memory 1g or --build-arg NODE_ENV=production. If the app currently has running containers, changes trigger a dokku ps:rebuild so they take effect immediately instead of waiting for the next deploy. See https://dokku.com/docs/advanced-usage/docker-options/.
 ---
 
 # dokku_app_docker_options (Resource)
 
-Injects a single custom Docker CLI flag into an app's build, deploy, and/or run containers (`dokku docker-options:add`), e.g. `--memory 1g` or `--build-arg NODE_ENV=production`. See https://dokku.com/docs/advanced-usage/docker-options/.
+Injects a single custom Docker CLI flag into an app's build, deploy, and/or run containers (`dokku docker-options:add`), e.g. `--memory 1g` or `--build-arg NODE_ENV=production`. If the app currently has running containers, changes trigger a `dokku ps:rebuild` so they take effect immediately instead of waiting for the next deploy. See https://dokku.com/docs/advanced-usage/docker-options/.
 
 
 
